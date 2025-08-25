@@ -85,18 +85,31 @@ class RM_controller:
         with self.state_lock:
             return self.current_gripper_state
     
+    def start_control(self, state, trigger=None):
+        """开始控制手臂，自动判断欧拉角或四元数"""
+
+        if self.is_controlling is False:
+            self.is_controlling = True
+            self.prev_tech_state = state
+            self.arm_first_state = self.get_state()
+            self.delta = [0, 0, 0, 0, 0, 0, 0]
+            print("[Control] Control started.")
+        else:
+            if len(state) == 6:
+                self.move(state)
+            elif len(state) == 7:
+                self.moveq(state)
+            if trigger is not None:
+                self.set_gripper(trigger)
+
+    def stop_control(self):
+        if self.is_controlling:
+            self.is_controlling = False
+            self.arm_first_state = None
+            self.prev_tech_state = None
+            print("[Control] Control stopped.")
+
     def move(self, tech_state):
-        # 使用缓存的当前状态，不再重新查询
-        with self.state_lock:
-            current_state = self.current_state
-            
-        if self.prev_tech_state is None:
-            self.prev_tech_state = tech_state
-            return
-            
-        if self.arm_first_state is None:
-            self.arm_first_state = current_state
-            return
          
         self.delta[0] = tech_state[0] - self.prev_tech_state[0]
         self.delta[1] = tech_state[1] - self.prev_tech_state[1]
@@ -115,6 +128,29 @@ class RM_controller:
         ] 
         
         success = self.arm_controller.rm_movep_canfd(next_state, False, 0, 80)
+    
+    def moveq(self, tech_state):
+        """四元数使用绝对姿态"""
+
+        self.delta[0] = tech_state[0] - self.prev_tech_state[0]
+        self.delta[1] = tech_state[1] - self.prev_tech_state[1]
+        self.delta[2] = tech_state[2] - self.prev_tech_state[2]
+        self.delta[3] = tech_state[3] - self.prev_tech_state[3]
+        self.delta[4] = tech_state[4] - self.prev_tech_state[4]
+        self.delta[5] = tech_state[5] - self.prev_tech_state[5]
+        self.delta[6] = tech_state[6] - self.prev_tech_state[6]
+        
+        next_state = [
+            self.arm_first_state[0] + self.delta[0],  
+            self.arm_first_state[1] + self.delta[1], 
+            self.arm_first_state[2] + self.delta[2], 
+            self.delta[3],
+            self.delta[4],
+            self.delta[5],
+            self.delta[6]
+        ] 
+        
+        success = self.arm_controller.rm_movep_canfd(next_state, False, 0, 80)
 
     def move_init(self, state):
         return self.arm_controller.rm_movej(state, 20, 0, 0, 1)
@@ -126,6 +162,26 @@ class RM_controller:
         elif gripper > 0.8 and self.gripper_close:
             success = self.arm_controller.rm_set_gripper_release(500, True, 0)        
             self.gripper_close = False
+        # if self.get_gripper()['mode'] in [1, 2, 3]:
+        #     def gripper_operation(controller, position):
+        #         controller.rm_set_gripper_position(position, False, 1)
+                
+            
+            # 计算目标位置
+            target_position = int(gripper * 1000)
+            
+            # 创建并启动线程
+            gripper_thread = threading.Thread(
+                target=gripper_operation,
+                args=(self.arm_controller, target_position)
+            )
+            gripper_thread.start()
+            print(f"Set gripper to {target_position/1000}")  # 转换回原始单位显示
+        else:
+            print("Gripper is not in position control mode.")
+
+        
+        
 
     def __del__(self):
         try:
@@ -138,9 +194,17 @@ class RM_controller:
         except Exception as e:
             print(f"Error during cleanup: {str(e)}")
 
-if __name__ == '__main__':
-    rm_ip = "192.168.0.18"
-    left = RM_controller(rm_ip, rm_thread_mode_e.RM_TRIPLE_MODE_E)
+def gripper_monitor(controller):
     while True:
-        print(left.get_gripper())
+        print(controller.get_gripper())
         time.sleep(0.1)
+
+if __name__ == '__main__':
+    rm_ip = "192.168.0.19"
+    left = RM_controller(rm_ip, rm_thread_mode_e.RM_TRIPLE_MODE_E)
+    # 主线程可以做其他事，或保持运行
+    try:
+        while True:
+            print(left.get_gripper())
+    except KeyboardInterrupt:
+        print("退出")

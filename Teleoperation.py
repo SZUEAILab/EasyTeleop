@@ -97,16 +97,14 @@ class Teleoperation:
         """
 
         try:
-            # print(data_dict)
-
             # 提取左臂位置和旋转角度
             left_pos = data_dict['leftPos']
             left_rot = data_dict['leftRot']
             left_quat = data_dict['leftQuat']
             x_l, y_l, z_l = left_pos['x'], left_pos['y'], left_pos['z']
-            roll_l, pitch_l, yaw_l = left_rot['x']*math.pi/180, left_rot['y']*math.pi/180, left_rot['z']*math.pi/180
+            # roll_l, pitch_l, yaw_l = left_rot['x']*math.pi/180, left_rot['y']*math.pi/180, left_rot['z']*math.pi/180
             quat_l = [left_quat['x'], left_quat['y'], left_quat['z'], left_quat['w']]
-            # roll_l,pitch_l, yaw_l = euler_from_quaternion(quat_l)
+            roll_l,pitch_l, yaw_l = euler_from_quaternion(quat_l)
             # roll_l = -roll_l  # 翻转 pitch 角度
 
             # 提取右臂位置和旋转角度
@@ -114,9 +112,9 @@ class Teleoperation:
             right_rot = data_dict['rightRot']
             right_quat = data_dict['rightQuat']
             x_r, y_r, z_r = right_pos['x'], right_pos['y'], right_pos['z']
-            roll_r, pitch_r, yaw_r = right_rot['x']*math.pi/180, right_rot['y']*math.pi/180, right_rot['z']*math.pi/180
+            # roll_r, pitch_r, yaw_r = right_rot['x']*math.pi/180, right_rot['y']*math.pi/180, right_rot['z']*math.pi/180
             quat_r = [right_quat['x'], right_quat['y'], right_quat['z'], right_quat['w']]
-            # roll_r,pitch_r, yaw_r = euler_from_quaternion(quat_r)
+            roll_r,pitch_r, yaw_r = euler_from_quaternion(quat_r)
             # roll_r = -roll_r  # 翻转 pitch 角度
 
             # 提取抓手状态
@@ -126,48 +124,20 @@ class Teleoperation:
             if (x_l == 0 and y_l == 0 and z_l == 0) : # the position missing, discared
                 debug_print("左手坐标为0，丢弃该条信息", True)
             else:
-
-                if self.left_wrist_controller.is_controlling is False:
-                    if data_dict['leftGrip']==True:
-                        self.left_wrist_controller.is_controlling = True
-                        self.left_wrist_controller.arm_first_state = self.left_wrist_controller.get_state()
-                        self.left_wrist_controller.prev_tech_state = [x_l, y_l, z_l, roll_l, pitch_l, yaw_l]
+                if data_dict['leftGrip']==True:
+                    self.left_wrist_controller.start_control([x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
                 else:
-                    if data_dict['leftGrip']==False:
-                        self.left_wrist_controller.is_controlling = False
-                        self.left_wrist_controller.arm_first_state = None
-                        self.left_wrist_controller.prev_tech_state = None
-                        debug_print("左臂控制已停止", True)
-                        return
-                    else:
-                        # 控制左臂
-                        self.left_wrist_controller.move([x_l, y_l, z_l, roll_l, pitch_l, yaw_l])
-                        self.left_wrist_controller.set_gripper(left_trigger)
-                        debug_print(f"左臂位置: {x_l}, {y_l}, {z_l} | 旋转: {roll_l}, {pitch_l}, {yaw_l}", True)
-                        debug_print(f"左抓手: {left_trigger}", True)
+                    self.left_wrist_controller.stop_control()
+                        
 
             
             if x_r == 0 and y_r == 0 and z_r == 0:
                 debug_print("右手坐标为0，丢弃该条信息", True)
             else:
-                if self.right_wrist_controller.is_controlling is False:
-                    if data_dict['rightGrip']==True:
-                        self.right_wrist_controller.is_controlling = True
-                        self.right_wrist_controller.arm_first_state = self.right_wrist_controller.get_state()
-                        self.right_wrist_controller.prev_tech_state = [x_r, y_r, z_r, roll_r, pitch_r, yaw_r]
+                if data_dict['rightGrip']==True:
+                    self.right_wrist_controller.start_control([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
                 else:
-                    if data_dict['rightGrip']==False:
-                        self.right_wrist_controller.is_controlling = False
-                        self.right_wrist_controller.arm_first_state = None
-                        self.right_wrist_controller.prev_tech_state = None
-                        debug_print("右臂控制已停止", True)
-                        return
-                    else:
-                        # 控制右臂
-                        self.right_wrist_controller.move([x_r, y_r, z_r, roll_r, pitch_r, yaw_r])
-                        self.right_wrist_controller.set_gripper(right_trigger)
-                        debug_print(f"右臂位置: {x_r}, {y_r}, {z_r} | 旋转: {roll_r}, {pitch_r}, {yaw_r}", True)
-                        debug_print(f"右抓手: {right_trigger}", True)
+                    self.right_wrist_controller.stop_control()
 
 
         except Exception as e:
@@ -202,6 +172,32 @@ class Teleoperation:
                 break
 
 DEBUG = False
+
+def euler_from_quaternion(quat):
+    """
+    手动实现四元数转欧拉角（XYZ旋转顺序，右手坐标系）
+    :param quat: 四元数列表，格式为 [x, y, z, w]（实部为w，虚部为x/y/z）
+    :return: 欧拉角 (roll, pitch, yaw)，单位为弧度（对应X/Y/Z轴旋转）
+    """
+    x, y, z, w = quat  # 解包四元数分量
+    
+    # 1. 计算滚转角（roll，X轴旋转）
+    sinr_cosp = 2 * (w * x + y * z)
+    cosr_cosp = 1 - 2 * (x * x + y * y)
+    roll = math.atan2(sinr_cosp, cosr_cosp)  # 范围：[-π, π]
+    
+    # 2. 计算俯仰角（pitch，Y轴旋转）
+    sinp = 2 * (w * y - z * x)
+    # 防止数值溢出（因浮点计算误差，sinp可能超出[-1,1]）
+    sinp = min(max(sinp, -1.0), 1.0)
+    pitch = math.asin(sinp)  # 范围：[-π/2, π/2]
+    
+    # 3. 计算偏航角（yaw，Z轴旋转）
+    siny_cosp = 2 * (w * z + x * y)
+    cosy_cosp = 1 - 2 * (y * y + z * z)
+    yaw = math.atan2(siny_cosp, cosy_cosp)  # 范围：[-π, π]
+    
+    return roll, pitch, yaw
 
 def euler_to_quat(rx, ry, rz):
     # 欧拉角转四元数，单位为度
