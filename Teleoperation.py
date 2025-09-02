@@ -1,40 +1,28 @@
 import sys
-import socket
 import threading
 import json
-from RealMan import RM_controller
-from Robotic_Arm.rm_robot_interface import *
 import os
 import time
 import math
 from scipy.spatial.transform import Rotation as R  # 需要安装 scipy
 
-# Socket 配置
-HOST = '192.168.0.20'  # 替换为服务器 IP 地址
-PORT = 12345            # 替换为服务器端口号
-
 class Teleoperation:
-    def __init__(self):
-        # 初始化机械臂控制器
-        self.left_wrist_controller = RM_controller("192.168.0.18", rm_thread_mode_e.RM_TRIPLE_MODE_E)
-        self.right_wrist_controller = RM_controller("192.168.0.19", rm_thread_mode_e.RM_TRIPLE_MODE_E)
-        debug_print("机械臂初始化完成", True)
-
-        # 初始化 socket 连接
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect((HOST, PORT))
-        debug_print(f"已连接到 Unity 服务器 {HOST}:{PORT}", True)
-
-        # 多线程
-        self.sender_thread = threading.Thread(target=self.feedback_thread_func, args=(self.sock,), daemon=True)
-        self.receiver_thread = threading.Thread(target=self.socket_receiver, daemon=True)
-        self.collect_thread = threading.Thread(target=self.data_collect_thread, daemon=True)
-        
+    def __init__(self,left_wrist_controller,right_wrist_controller = None):
+        # 控制器回调
+        self.left_wrist_controller = left_wrist_controller
+        self.right_wrist_controller = right_wrist_controller
 
     def run(self):
-        self.sender_thread.start()
-        self.receiver_thread.start()
-        self.collect_thread.start()
+        # 多线程
+        # self.sender_thread = threading.Thread(target=self.feedback_thread_func, args=(self.sock,), daemon=True)
+        # self.collect_thread = threading.Thread(target=self.data_collect_thread, daemon=True)
+        
+        # self.sender_thread.start()
+        # self.collect_thread.start()
+        
+                
+                
+        
         while True:
             time.sleep(1)
             # self.sender_thread.join(1)
@@ -52,45 +40,45 @@ class Teleoperation:
                 debug_print(f"数据收集线程出错: {e}", True)
                 break
 
-    def feedback_thread_func(self, sock ,delay = 0.05):
-        while True:
-            try:
-                # 读取当前位置并反馈
-                left_state = self.left_wrist_controller.get_state()
-                right_state = self.right_wrist_controller.get_state()
-                left_quat = euler_to_quat(left_state[3], left_state[4], left_state[5])
-                right_quat = euler_to_quat(right_state[3], right_state[4], right_state[5])
+    # def feedback_thread_func(self, sock ,delay = 0.05):
+    #     while True:
+    #         try:
+    #             # 读取当前位置并反馈
+    #             left_state = self.left_wrist_controller.get_state()
+    #             right_state = self.right_wrist_controller.get_state()
+    #             left_quat = euler_to_quat(left_state[3], left_state[4], left_state[5])
+    #             right_quat = euler_to_quat(right_state[3], right_state[4], right_state[5])
                 
-                feedback = {
-                    "leftPos":{
-                        "x": left_state[0],
-                        "y": left_state[1],
-                        "z": left_state[2],
-                    },
-                    "leftRot":{
-                        "x": left_state[3]*180/math.pi,
-                        "y": left_state[4]*180/math.pi,
-                        "z": left_state[5]*180/math.pi,
-                    },
-                    "leftQuat": left_quat,
-                    "rightPos":{
-                        "x": right_state[0],
-                        "y": right_state[1],
-                        "z": right_state[2],
-                    },
-                    "rightRot":{
-                        "x": right_state[3]*180/math.pi,
-                        "y": right_state[4]*180/math.pi,
-                        "z": right_state[5]*180/math.pi,
-                    },
-                    "rightQuat": right_quat
-                }
-                feedback_json = json.dumps(feedback) + "\n"
-                sock.sendall(feedback_json.encode("utf-8"))
-                time.sleep(delay)
-            except KeyboardInterrupt:
-                break
-
+    #             feedback = {
+    #                 "leftPos":{
+    #                     "x": left_state[0],
+    #                     "y": left_state[1],
+    #                     "z": left_state[2],
+    #                 },
+    #                 "leftRot":{
+    #                     "x": left_state[3]*180/math.pi,
+    #                     "y": left_state[4]*180/math.pi,
+    #                     "z": left_state[5]*180/math.pi,
+    #                 },
+    #                 "leftQuat": left_quat,
+    #                 "rightPos":{
+    #                     "x": right_state[0],
+    #                     "y": right_state[1],
+    #                     "z": right_state[2],
+    #                 },
+    #                 "rightRot":{
+    #                     "x": right_state[3]*180/math.pi,
+    #                     "y": right_state[4]*180/math.pi,
+    #                     "z": right_state[5]*180/math.pi,
+    #                 },
+    #                 "rightQuat": right_quat
+    #             }
+    #             feedback_json = json.dumps(feedback) + "\n"
+    #             sock.sendall(feedback_json.encode("utf-8"))
+    #             time.sleep(delay)
+    #         except KeyboardInterrupt:
+    #             break
+    
     def handle_socket_data(self,data_dict):
         """
         处理从 socket 接收到的数据
@@ -144,32 +132,11 @@ class Teleoperation:
             debug_print(f"处理数据时出错: {e}", True)
 
 
+    
 
-    def socket_receiver(self):
-        """
-        Socket 接收线程
-        """
-        buffer = ""
-        while True:
-            try:
-                data = self.sock.recv(1024)
-                if not data:
-                    debug_print("[Quest断开连接]")
-                    break
-                buffer += data.decode('utf-8')
-                while '\n' in buffer:
-                    line, buffer = buffer.split('\n', 1)
-                    if line.strip() == "":
-                        continue
-                    try:
-                        msg = json.loads(line)
-                        self.handle_socket_data(msg)
-                    except json.JSONDecodeError as e:
-                        debug_print("[JSON解析失败]", e)
-                        break
-            except Exception as e:
-                debug_print(f"Socket接收异常: {e}", True)
-                break
+
+
+    
 
 DEBUG = False
 
@@ -209,11 +176,3 @@ def debug_print(msg, release=False):
     if release or DEBUG:
         print(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] [DEBUG] {msg}")
 
-if __name__ == '__main__':
-    operate = Teleoperation()
-    try:
-        operate.run()
-    except KeyboardInterrupt:
-        print("\n[退出] 检测到 Ctrl+C，程序已终止。")
-        if hasattr(operate, "sock"):
-            operate.sock.close()

@@ -5,10 +5,10 @@ import threading
 from threading import Lock
 
 class RM_controller:
-    def __init__(self, rm_ip, thread_mode=None, poll_interval=0.01):  # 添加了轮询间隔参数
+    def __init__(self, rm_ip,port = 8080, thread_mode=None, poll_interval=0.01):  # 添加了轮询间隔参数
         try:
             self.arm_controller = RoboticArm(thread_mode)
-            self.handle = self.arm_controller.rm_create_robot_arm(rm_ip, 8080) 
+            self.handle = self.arm_controller.rm_create_robot_arm(rm_ip, port) 
         except Exception as e:
             raise ConnectionError(f"Failed to initialize robot arm: {str(e)}")
         
