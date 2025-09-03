@@ -15,13 +15,22 @@ if __name__ == '__main__':
         r_arm.start()
         # 启动遥操作
         vrsocket = VRSocket(VR_IP, VR_PORT)
-        teleop = Teleoperation(left_wrist_controller=l_arm, right_wrist_controller=r_arm)
+        vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响
+        teleop = Teleoperation()
+        # 注册回调函数
+        teleop.on_left_grip_down(l_arm.start_control)
+        teleop.on_left_grip_up(l_arm.stop_control)
+        teleop.on_right_grip_down(r_arm.start_control)
+        teleop.on_right_grip_up(r_arm.stop_control)
         
-        @vrsocket.on_message
-        def handle_message(msg):
-            teleop.handle_socket_data(msg)
+        #注册回调函数
+        vrsocket.on_message(teleop.handle_socket_data)
+        # 下面这种写法也行
+        # @vrsocket.on_message
+        # def handle_message(msg):
+        #     teleop.handle_socket_data(msg)
         
-        vrsocket.start() #启动数据接收线程
+        
         
         teleop.start() #暂时啥都没有,就是个while阻止主线程退出的
     except Exception as e:

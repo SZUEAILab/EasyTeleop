@@ -1,6 +1,6 @@
 # 如何使用
-- Teleoperation.py中设置RM_controller的ip为对应的左右臂ip,Host设置为Quest的ip
-- 运行Teleoperation().run()启动遥操作相关的线程(注意需要在主线程While True阻止主线程退出)
+- 运行run.py直接启动
+- 注意每个类都要start一下来启动相关线程
 
 # 代码介绍
 ## RealMan.py

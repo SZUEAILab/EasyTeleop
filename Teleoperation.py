@@ -7,10 +7,30 @@ import math
 from scipy.spatial.transform import Rotation as R  # 需要安装 scipy
 
 class Teleoperation:
-    def __init__(self,left_wrist_controller,right_wrist_controller = None):
+    def __init__(self,left_wrist_controller = None,right_wrist_controller = None):
         # 控制器回调
         self.left_wrist_controller = left_wrist_controller
         self.right_wrist_controller = right_wrist_controller
+        
+        self._on_left_grip_up = self._default_callback
+        self._on_left_grip_down = self._default_callback
+        self._on_right_grip_up = self._default_callback
+        self._on_right_grip_down = self._default_callback
+        
+    def _default_callback(self):
+        pass
+    
+    def on_left_grip_up(self,callback):
+        self._on_left_grip_up = callback
+        
+    def on_left_grip_down(self,callback):
+        self._on_left_grip_down = callback
+        
+    def on_right_grip_up(self,callback):
+        self._on_right_grip_up = callback
+        
+    def on_right_grip_down(self,callback):
+        self._on_right_grip_down = callback
 
     def start(self):
         # 多线程
@@ -113,9 +133,11 @@ class Teleoperation:
                 debug_print("左手坐标为0，丢弃该条信息", True)
             else:
                 if data_dict['leftGrip']==True:
-                    self.left_wrist_controller.start_control([x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
+                    self._on_left_grip_down([x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
+                    # self.left_wrist_controller.start_control([x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
                 else:
-                    self.left_wrist_controller.stop_control()
+                    self._on_left_grip_up()
+                    # self.left_wrist_controller.stop_control()
                         
 
             
@@ -123,9 +145,11 @@ class Teleoperation:
                 debug_print("右手坐标为0，丢弃该条信息", True)
             else:
                 if data_dict['rightGrip']==True:
-                    self.right_wrist_controller.start_control([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
+                    self._on_right_grip_down([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
+                    # self.right_wrist_controller.start_control([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
                 else:
-                    self.right_wrist_controller.stop_control()
+                    self._on_right_grip_up()
+                    # self.right_wrist_controller.stop_control()
 
 
         except Exception as e:
