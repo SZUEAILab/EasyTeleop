@@ -3,14 +3,18 @@ import time
 import numpy as np
 import threading
 from threading import Lock
+from Robots.Robot import Robot
 
-class RM_controller:
-    def __init__(self, rm_ip,port = 8080, thread_mode=None, poll_interval=0.01):  # 添加了轮询间隔参数
-        try:
-            self.arm_controller = RoboticArm(thread_mode)
-            self.handle = self.arm_controller.rm_create_robot_arm(rm_ip, port) 
-        except Exception as e:
-            raise ConnectionError(f"Failed to initialize robot arm: {str(e)}")
+class RM_controller(Robot):
+    """
+    RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
+    """
+    def __init__(self, ip, port=8080, thread_mode=rm_thread_mode_e.RM_TRIPLE_MODE_E, poll_interval=0.01):
+        super().__init__(ip)
+        
+        self.port = port
+        self.thread_mode = thread_mode
+        
         
         # 状态存储变量
         self.current_state = None
@@ -29,15 +33,39 @@ class RM_controller:
         self.gripper_close = False
         self.delta = [0, 0, 0 , 0 , 0 , 0]
         
+        
+        
+    def start(self):
+        try:
+            self.arm_controller = RoboticArm(self.thread_mode)
+            self.handle = self.arm_controller.rm_create_robot_arm(self.ip, self.port) 
+            if self.handle.id == -1:
+                raise ConnectionError(f"Failed to connect to robot arm at {self.ip}:{self.port}")
+            print(f"[Initialize]Robot arm connected at {self.ip}:{self.port}")
+        except Exception as e:
+            raise ConnectionError(f"Failed to initialize robot arm: {str(e)}")
         # 启动轮询线程
         self.start_polling()
 
         print("[Initialize]Robot arm initialized and polling started.")
         
-        # 等待初始状态被获取
-        while self.current_state is None:
-            print("Waiting for initial state...")
-            time.sleep(0.1)
+        # 获取初始状态
+        try:
+            # 获取手臂状态
+            succ, arm_state = self.arm_controller.rm_get_current_arm_state()
+            if not succ:
+                with self.state_lock:
+                    self.current_state = arm_state["pose"]
+            
+            # 获取夹爪状态
+            succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
+            if not succ_gripper:
+                with self.state_lock:
+                    self.current_gripper_state = gripper_state
+            
+        except Exception as e:
+            self.stop_polling()
+            raise RuntimeError(f"Failed to get initial robot state: {str(e)}")
 
     def start_polling(self):
         """启动状态轮询线程"""
@@ -162,23 +190,23 @@ class RM_controller:
         elif gripper > 0.8 and self.gripper_close:
             success = self.arm_controller.rm_set_gripper_release(500, True, 0)        
             self.gripper_close = False
-        # if self.get_gripper()['mode'] in [1, 2, 3]:
+        # if self.get_gripper() and self.get_gripper().get('mode') in [1, 2, 3]:
         #     def gripper_operation(controller, position):
         #         controller.rm_set_gripper_position(position, False, 1)
                 
             
-            # 计算目标位置
-            target_position = int(gripper * 1000)
+        #     # 计算目标位置
+        #     target_position = int(gripper * 1000)
             
-            # 创建并启动线程
-            gripper_thread = threading.Thread(
-                target=gripper_operation,
-                args=(self.arm_controller, target_position)
-            )
-            gripper_thread.start()
-            print(f"Set gripper to {target_position/1000}")  # 转换回原始单位显示
-        else:
-            print("Gripper is not in position control mode.")
+        #     # 创建并启动线程
+        #     gripper_thread = threading.Thread(
+        #         target=gripper_operation,
+        #         args=(self.arm_controller, target_position)
+        #     )
+        #     gripper_thread.start()
+        #     print(f"Set gripper to {target_position/1000}")  # 转换回原始单位显示
+        # else:
+        #     print("Gripper is not in position control mode.")
 
         
         
@@ -194,17 +222,17 @@ class RM_controller:
         except Exception as e:
             print(f"Error during cleanup: {str(e)}")
 
-def gripper_monitor(controller):
-    while True:
-        print(controller.get_gripper())
-        time.sleep(0.1)
-
 if __name__ == '__main__':
-    rm_ip = "192.168.0.19"
-    left = RM_controller(rm_ip, rm_thread_mode_e.RM_TRIPLE_MODE_E)
+    rm_ip = "192.168.0.18"
+    left = RM_controller(rm_ip,port = 8080)
+    try:
+        left.start()
+    except Exception as e:
+        print(f"Failed to start robot arm: {e}")
     # 主线程可以做其他事，或保持运行
     try:
         while True:
-            print(left.get_gripper())
+            print(left.get_state())
+            time.sleep(0.2)
     except KeyboardInterrupt:
         print("退出")

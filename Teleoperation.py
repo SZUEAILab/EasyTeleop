@@ -12,7 +12,7 @@ class Teleoperation:
         self.left_wrist_controller = left_wrist_controller
         self.right_wrist_controller = right_wrist_controller
 
-    def run(self):
+    def start(self):
         # 多线程
         # self.sender_thread = threading.Thread(target=self.feedback_thread_func, args=(self.sock,), daemon=True)
         # self.collect_thread = threading.Thread(target=self.data_collect_thread, daemon=True)

@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>遥操作系统控制台</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .container { max-width: 600px; margin: auto; }
+        input, button { margin: 5px 0; padding: 8px; width: 100%; }
+        .status { margin-top: 20px; padding: 10px; background: #f0f0f0; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>遥操作系统控制台</h2>
+    <form id="configForm">
+        <label>VR IP: <input type="text" id="vr_ip" required></label><br>
+        <label>VR 端口: <input type="number" id="vr_port" required></label><br>
+        <label>左臂 IP: <input type="text" id="left_rm_ip" required></label><br>
+        <label>右臂 IP: <input type="text" id="right_rm_ip" required></label><br>
+        <button type="submit">保存配置</button>
+    </form>
+    <button onclick="connectRobot()">连接机器人</button>
+    <button onclick="connectVR()">连接VR端</button>
+    <button onclick="startTeleop()">启动遥操作</button>
+    <div class="status" id="status"></div>
+</div>
+<script>
+    function showStatus(msg, type="") {
+        const statusDiv = document.getElementById("status");
+        statusDiv.innerHTML = msg;
+        statusDiv.className = "status " + type;
+    }
+
+    async function fetchStatus() {
+        const res = await fetch("/status");
+        const data = await res.json();
+        let html = `
+            <b>连接状态：</b><br>
+            VR连接: ${data.vr_connected ? "✅" : "❌"}<br>
+            左臂连接: ${data.left_rm_connected ? "✅" : "❌"}<br>
+            右臂连接: ${data.right_rm_connected ? "✅" : "❌"}<br>
+            遥操作运行: ${data.teleop_running ? "✅" : "❌"}
+        `;
+        showStatus(html);
+    }
+
+    document.getElementById("configForm").onsubmit = async function(e) {
+        e.preventDefault();
+        const cfg = {
+            vr_ip: document.getElementById("vr_ip").value,
+            vr_port: parseInt(document.getElementById("vr_port").value),
+            left_rm_ip: document.getElementById("left_rm_ip").value,
+            right_rm_ip: document.getElementById("right_rm_ip").value
+        };
+        const res = await fetch("/config", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(cfg)
+        });
+        if (res.ok) {
+            showStatus("配置已保存", "success");
+            fetchStatus();
+        } else {
+            showStatus("配置保存失败", "error");
+        }
+    };
+
+    async function connectRobot() {
+        const res = await fetch("/connect/robot", {method: "POST"});
+        if (res.ok) {
+            showStatus("机器人连接成功", "success");
+            fetchStatus();
+        } else {
+            const err = await res.json();
+            showStatus("机器人连接失败: " + err.detail, "error");
+        }
+    }
+
+    async function connectVR() {
+        const res = await fetch("/connect/vr", {method: "POST"});
+        if (res.ok) {
+            showStatus("VR端连接成功", "success");
+            fetchStatus();
+        } else {
+            const err = await res.json();
+            showStatus("VR端连接失败: " + err.detail, "error");
+        }
+    }
+
+    async function startTeleop() {
+        const res = await fetch("/start_teleop", {method: "POST"});
+        if (res.ok) {
+            showStatus("遥操作已启动", "success");
+            fetchStatus();
+        } else {
+            const err = await res.json();
+            showStatus("遥操作启动失败: " + err.detail, "error");
+        }
+    }
+
+    fetchStatus();
+    setInterval(fetchStatus, 3000);
+</script>
+</body>
+</html>
