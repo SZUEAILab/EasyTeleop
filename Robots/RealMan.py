@@ -3,7 +3,7 @@ import time
 import numpy as np
 import threading
 from threading import Lock
-from Robots.Robot import Robot
+from .Robot import Robot
 
 class RM_controller(Robot):
     """

@@ -8,14 +8,53 @@ from scipy.spatial.transform import Rotation as R  # 需要安装 scipy
 
 class Teleoperation:
     def __init__(self,left_wrist_controller = None,right_wrist_controller = None):
-        # 控制器回调
-        self.left_wrist_controller = left_wrist_controller
-        self.right_wrist_controller = right_wrist_controller
+        # 用字典存储事件与回调的映射，格式: {事件名: [回调1, 回调2, ...]}
+        self._events = {
+             "buttonAUp": self._default_callback,
+            "buttonADown": self._default_callback,
+            "buttonATurnDown": self._default_callback,
+            "buttonATurnUp": self._default_callback,
+            "buttonBUp": self._default_callback,
+            "buttonBDown": self._default_callback,
+            "buttonBTurnDown": self._default_callback,
+            "buttonBTurnUp": self._default_callback,
+            "buttonXUp": self._default_callback,
+            "buttonXDown": self._default_callback,
+            "buttonXTurnDown": self._default_callback,
+            "buttonXTurnUp": self._default_callback,
+            "buttonYUp": self._default_callback,
+            "buttonYDown": self._default_callback,
+            "buttonYTurnDown": self._default_callback,
+            "bttonYTurnUp": self._default_callback,  # 注意原字段拼写
+            "leftGripUp": self._default_callback,
+            "leftGripDown": self._default_callback,
+            "leftGripTurnDown": self._default_callback,
+            "leftGripTurnUp": self._default_callback,
+            "rightGripUp": self._default_callback,
+            "rightGripDown": self._default_callback,
+            "rightGripTurnDown": self._default_callback,
+            "rightGripTurnUp":self._default_callback,
+        }
         
-        self._on_left_grip_up = self._default_callback
-        self._on_left_grip_down = self._default_callback
-        self._on_right_grip_up = self._default_callback
-        self._on_right_grip_down = self._default_callback
+    def on(self, event_name: str, callback):
+        """注册事件回调函数"""
+        # 如果事件不存在
+        if event_name not in self._events:
+            return
+        # 将回调函数添加到事件列表中
+        self._events[event_name] = callback
+
+    def off(self, event_name: str):
+        """移除事件回调函数"""
+        if event_name not in self._events:
+            return
+        del self._events[event_name]
+
+    def emit(self, event_name: str, *args, **kwargs):
+        """触发事件，执行所有注册的回调函数"""
+        if event_name not in self._events:
+            return
+        self._events[event_name](*args, **kwargs)
         
     def _default_callback(self):
         pass
@@ -35,10 +74,8 @@ class Teleoperation:
     def start(self):
         # 多线程
         # self.sender_thread = threading.Thread(target=self.feedback_thread_func, args=(self.sock,), daemon=True)
-        # self.collect_thread = threading.Thread(target=self.data_collect_thread, daemon=True)
         
         # self.sender_thread.start()
-        # self.collect_thread.start()
         
                 
                 
@@ -47,18 +84,6 @@ class Teleoperation:
             time.sleep(1)
             # self.sender_thread.join(1)
             # self.receiver_thread.join(1)
-
-    def data_collect_thread(self):
-        """
-        数据收集线程，定期收集机械臂数据并保存
-        """
-        while True:
-            try:
-                # 这里可以添加数据收集和保存的逻辑
-                time.sleep(1)  # 每秒收集一次数据
-            except Exception as e:
-                debug_print(f"数据收集线程出错: {e}", True)
-                break
 
     # def feedback_thread_func(self, sock ,delay = 0.05):
     #     while True:
@@ -99,11 +124,10 @@ class Teleoperation:
     #         except KeyboardInterrupt:
     #             break
     
-    def handle_socket_data(self,data_dict):
+    def handle_socket_data(self, data_dict):
         """
-        处理从 socket 接收到的数据
+        处理从 socket 接收到的数据，并根据事件字段触发回调
         """
-
         try:
             # 提取左臂位置和旋转角度
             left_pos = data_dict['leftPos']
@@ -133,10 +157,10 @@ class Teleoperation:
                 debug_print("左手坐标为0，丢弃该条信息", True)
             else:
                 if data_dict['leftGrip']==True:
-                    self._on_left_grip_down([x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
+                    self.emit("leftGripDown",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
                     # self.left_wrist_controller.start_control([x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
                 else:
-                    self._on_left_grip_up()
+                    self.emit("leftGripUp")
                     # self.left_wrist_controller.stop_control()
                         
 
@@ -145,17 +169,46 @@ class Teleoperation:
                 debug_print("右手坐标为0，丢弃该条信息", True)
             else:
                 if data_dict['rightGrip']==True:
-                    self._on_right_grip_down([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
+                    self.emit("rightGripDown",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
                     # self.right_wrist_controller.start_control([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
                 else:
-                    self._on_right_grip_up()
+                    self.emit("rightGripUp")
                     # self.right_wrist_controller.stop_control()
 
 
         except Exception as e:
             debug_print(f"处理数据时出错: {e}", True)
 
+        try:
+            # 状态类事件（Up/Down）
+            state_events = [
+                ("buttonA", "buttonADown", "buttonAUp"),
+                ("buttonB", "buttonBDown", "buttonBUp"),
+                ("buttonX", "buttonXDown", "buttonXUp"),
+                ("buttonY", "buttonYDown", "buttonYUp"),
+            ]
+            for field, down_evt, up_evt in state_events:
+                if field in data_dict:
+                    if data_dict[field]:
+                        self.emit(down_evt)
+                    else:
+                        self.emit(up_evt)
 
+            # 触发类事件（TurnDown/TurnUp等，只在True时触发）
+            trigger_events = [
+                "buttonATurnDown", "buttonATurnUp",
+                "buttonBTurnDown", "buttonBTurnUp",
+                "buttonXTurnDown", "buttonXTurnUp",
+                "buttonYTurnDown", "buttonYTurnUp",
+                "rightGripTurnDown", "rightGripTurnUp",
+                "leftGripTurnDown", "leftGripTurnUp"
+            ]
+            for evt in trigger_events:
+                if data_dict.get(evt, False):
+                    self.emit(evt)
+
+        except Exception as e:
+            debug_print(f"处理数据时出错: {e}", True)
     
 
 
