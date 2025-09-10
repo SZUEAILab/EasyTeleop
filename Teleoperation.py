@@ -48,7 +48,7 @@ class Teleoperation:
         """移除事件回调函数"""
         if event_name not in self._events:
             return
-        del self._events[event_name]
+        self._events[event_name] = self._default_callback
 
     def emit(self, event_name: str, *args, **kwargs):
         """触发事件，执行所有注册的回调函数"""
@@ -116,6 +116,7 @@ class Teleoperation:
         """
         处理从 socket 接收到的数据，并根据事件字段触发回调
         """
+        print(data_dict)
         try:
             # 提取左臂位置和旋转角度
             left_pos = data_dict['leftPos']

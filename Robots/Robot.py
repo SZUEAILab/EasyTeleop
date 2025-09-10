@@ -46,7 +46,7 @@ class Robot:
         """移除事件回调函数"""
         if event_name not in self._events:
             return
-        del self._events[event_name]
+        self._events[event_name] = self._default_callback
 
     def emit(self, event_name: str, *args, **kwargs):
         """触发事件，执行所有注册的回调函数"""
