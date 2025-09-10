@@ -2,9 +2,16 @@ import cv2
 import numpy as np
 from typing import Dict, Any, Tuple
 import pyrealsense2 as rs
-from pyorbbecsdk import *
-from BaseCamera import BaseCamera,CAMERA_SERIALS
+# from pyorbbecsdk import *
+from .BaseCamera import BaseCamera
 
+CAMERA_SERIALS = {
+    "RealSense": {
+        'head': '153122070447',  
+        'left_wrist': '427622270438',   
+        'right_wrist': '427622270277',   
+    }
+}
 class RealSenseCamera(BaseCamera):
     """RealSense摄像头设备实现"""
     
@@ -14,28 +21,32 @@ class RealSenseCamera(BaseCamera):
         self.config = rs.config()  
     
     def connect(self, **kwargs) -> bool:
-        """连接RealSense摄像头"""
+        """连接RealSense摄像头"""
         try:
             self.pipeline = rs.pipeline()
             self.config.enable_device(CAMERA_SERIALS[self.camera_type][self.camera_position])
             self.config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
             self.config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
             self.pipeline.start(self.config)
+            self.set_conn_status(1)
             self.logger_msg(f"connected successfully")
             return True
         except Exception as e:
+            self.set_conn_status(2)
             self.logger_msg(f"connect failed: {str(e)}")
             return False
     
     def disconnect(self) -> bool:
-        """断开RealSense摄像头连接"""
+        """断开RealSense摄像头连接"""
         try:
             if self.pipeline:
                 self.pipeline.stop()
                 self.pipeline = None
+            self.set_conn_status(2)
             self.logger_msg(f"disconnected successfully")
             return True
         except Exception as e:
+            self.set_conn_status(2)
             self.logger_msg(f"disconnect failed: {str(e)}")
             return False
     

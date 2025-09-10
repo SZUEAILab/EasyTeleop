@@ -54,6 +54,24 @@ button {
 button:hover {
   background: #0056b3;
 }
+/* 卡片式设备管理样式 */
+.device-card {
+  background: #f0f6ff;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: inline-block;
+  min-width: 220px;
+  vertical-align: top;
+}
+.device-card button {
+  margin-right: 8px;
+  margin-top: 8px;
+}
+#add-device-modal {
+  min-width: 320px;
+}
 #teleop-log {
   background: #f0f6ff;
   border-radius: 4px;

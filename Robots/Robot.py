@@ -14,10 +14,48 @@ class Robot:
         self._state = None
         self._gripper = None
         self._on_state = None  # 新增回调接口
+        self._events = {
+             "state": self._default_callback,
+        }
+        # 连接状态: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接(红色)
+        self._conn_status = 0
 
-    def on_state(self, callback):
-        """设置状态更新回调函数"""
-        self._on_state = callback
+    def get_conn_status(self):
+        """
+        获取设备连接状态
+        :return: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接(红色)
+        """
+        return self._conn_status
+
+    def set_conn_status(self, status):
+        """
+        设置设备连接状态
+        :param status: 0=未连接, 1=已连接, 2=断开连接
+        """
+        if status in (0, 1, 2):
+            self._conn_status = status
+    def on(self, event_name: str, callback):
+        """注册事件回调函数"""
+        # 如果事件不存在
+        if event_name not in self._events:
+            return
+        # 将回调函数添加到事件列表中
+        self._events[event_name] = callback
+
+    def off(self, event_name: str):
+        """移除事件回调函数"""
+        if event_name not in self._events:
+            return
+        del self._events[event_name]
+
+    def emit(self, event_name: str, *args, **kwargs):
+        """触发事件，执行所有注册的回调函数"""
+        if event_name not in self._events:
+            return
+        self._events[event_name](*args, **kwargs)
+        
+    def _default_callback(self,*args, **kwargs):
+        pass
 
     def start(self):
         """

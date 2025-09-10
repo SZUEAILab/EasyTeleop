@@ -1,97 +1,90 @@
-# EasyTeleop 遥操作管理平台 API 文档
+# EasyTeleop 遥操作管理平台 API 文档（卡片式设备管理）
 
-## 设备配置
+## 设备列表与详情
 
-### POST /config
-- 描述：保存设备组配置（VR头显、机械臂、摄像头）。
+### GET /devices
+- 描述：获取所有设备列表（按类别分组）。
+- 返回：
+```json
+{
+  "vr": [{ "id": 1, "type": "Quest", "config": {...} }],
+  "arm": [{ "id": 2, "type": "RealMan", "config": {...} }],
+  "camera": [{ "id": 3, "type": "RealSense", "config": {...} }]
+}
+```
+
+### GET /device/{category}/{id}
+- 描述：获取单个设备详情。
+- 路径参数：
+  - category: "vr" | "arm" | "camera"
+  - id: 设备ID
+- 返回：
+```json
+{ "id": 3, "type": "RealSense", "config": {...} }
+```
+
+---
+
+## 设备添加与配置
+
+### POST /device/{category}/add
+- 描述：新增设备（添加卡片）。
+- 路径参数：
+  - category: "vr" | "arm" | "camera"
 - 请求体（JSON）：
 ```json
-{
-	"vr_ip": "192.168.1.100",
-	"vr_port": 9000,
-	"arms": [
-		{"ip": "192.168.1.101", "port": 8001},
-		{"ip": "192.168.1.102", "port": 8002}
-	],
-	"cameras": [
-		{"type": "RealSense", "position": "front", "serial": "123456"}
-	]
-}
+{ "type": "RealSense", "config": { "camera_type": "RealSense", "camera_position": "left_wrist", "camera_serial": "427622270438" } }
 ```
 - 返回：
 ```json
-{"msg": "配置已保存"}
+{ "msg": "设备已添加" }
 ```
 
-### GET /config
-- 描述：获取当前设备组配置。
-- 返回：
-```json
-{
-	"vr_ip": "192.168.1.100",
-	"vr_port": 9000,
-	"arms": [...],
-	"cameras": [...]
-}
-```
-
----
-
-## 设备连接
-
-### POST /connect/vr
-- 描述：连接 VR 头显。
-- 返回：
-```json
-{"msg": "VR已连接"}
-```
-
-### POST /connect/arm
-- 描述：连接所有配置的机械臂。
-- 返回：
-```json
-{"msg": "机械臂已连接"}
-```
-
-### POST /connect/camera
-- 描述：连接所有配置的摄像头。
-- 返回：
-```json
-{"msg": "摄像头已连接"}
-```
-
----
-
-## 设备查询
-
-### GET /devices/{type}
-- 描述：查询指定类型设备池状态。
+### PUT /device/{category}/{id}/config
+- 描述：修改设备配置（卡片内配置按钮）。
 - 路径参数：
-	- type: "vr" | "arm" | "camera"
+  - category: "vr" | "arm" | "camera"
+  - id: 设备ID
+- 请求体（JSON）：
+```json
+{ "config": { ... } }
+```
 - 返回：
 ```json
-{"devices": ["main", "arm_0", "arm_1", "manager"]}
+{ "msg": "配置已更新" }
 ```
 
 ---
 
-## 遥操作启动
+## 设备启动与停止
 
-### POST /start_teleop
-- 描述：启动遥操作流程，注册 VR 消息回调。
+### POST /device/{category}/{id}/start
+- 描述：启动设备（卡片内开始按钮）。
+- 路径参数：
+  - category: "vr" | "arm" | "camera"
+  - id: 设备ID
 - 返回：
 ```json
-{"msg": "遥操作已启动"}
+{ "msg": "设备已启动" }
+```
+
+### POST /device/{category}/{id}/stop
+- 描述：停止设备（卡片内结束按钮）。
+- 路径参数：
+  - category: "vr" | "arm" | "camera"
+  - id: 设备ID
+- 返回：
+```json
+{ "msg": "设备已停止并删除" }
 ```
 
 ---
 
-## 其他说明
-- 所有接口均为 RESTful 风格，推荐使用 application/json。
-- 设备组配置需至少包含一个机械臂（默认左臂），最多两个机械臂，唯一头显，摄像头可多个。
-- 启动遥操作前需保证设备已连接。
+## 说明
+- 所有设备均以卡片形式展示，支持动态添加、配置、启动、停止。
+- 推荐使用 application/json。
+- 设备配置字段请参考各设备类型说明。
+- 启动/停止操作需设备已配置。
 - 设备状态和日志可通过前端页面实时查看。
-
----
 
 © 2025 SZUEAILab

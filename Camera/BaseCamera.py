@@ -13,7 +13,23 @@ class BaseCamera(ABC):
         self.camera_position = camera_position
         self.camera_serial = camera_serial
         self.logger = logging.getLogger(f"{self.__class__.__name__}_{self.camera_position}")
-        pass
+        # 连接状态: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接(红色)
+        self._conn_status = 0
+
+    def get_conn_status(self):
+        """
+        获取设备连接状态
+        :return: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接(红色)
+        """
+        return self._conn_status
+
+    def set_conn_status(self, status):
+        """
+        设置设备连接状态
+        :param status: 0=未连接, 1=已连接, 2=断开连接
+        """
+        if status in (0, 1, 2):
+            self._conn_status = status
 
     def logger_msg(self,msg:str):
         print(f"[{self.camera_type}][{self.camera_position}] {msg}")

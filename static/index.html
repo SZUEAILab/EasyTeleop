@@ -4,50 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>遥操作管理平台</title>
+  <!-- 引入Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div id="app">
-    <header>
-      <h1>遥操作管理平台</h1>
-    </header>
-    <main>
-      <section id="device-status">
-        <h2>设备状态</h2>
-        <div id="status-list"></div>
-        <button onclick="connectAll()">一键连接所有设备</button>
-      </section>
-      <section id="config">
-        <h2>设备组配置</h2>
-        <form id="config-form">
-          <fieldset>
-            <legend>VR头显</legend>
-            <input type="text" name="vr_ip" placeholder="VR IP" required>
-            <input type="number" name="vr_port" placeholder="VR端口" required>
-          </fieldset>
-          <fieldset>
-            <legend>机械臂</legend>
-            <div id="arms-list"></div>
-            <button type="button" onclick="addArm()">添加机械臂</button>
-          </fieldset>
-          <fieldset>
-            <legend>摄像头</legend>
-            <div id="cameras-list"></div>
-            <button type="button" onclick="addCamera()">添加摄像头</button>
-          </fieldset>
-          <button type="submit">保存配置</button>
-        </form>
-      </section>
-      <section id="teleop">
-        <h2>遥操作启动</h2>
-        <button onclick="startTeleop()">启动遥操作</button>
-        <div id="teleop-log"></div>
-      </section>
-    </main>
-    <footer>
-      <small>© 2025 SZUEAILab</small>
-    </footer>
-  </div>
+  <div id="app"></div>
   <script src="main.js"></script>
 </body>
 </html>

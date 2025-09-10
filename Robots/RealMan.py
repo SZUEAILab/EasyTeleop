@@ -12,7 +12,7 @@ class RM_controller(Robot):
     def __init__(self, config, thread_mode=rm_thread_mode_e.RM_TRIPLE_MODE_E, poll_interval=0.01):
         super().__init__(config)
         self.ip = config["ip"]
-        self.port = config.get("port", 8080)
+        self.port = int(config["port"])
         self.thread_mode = thread_mode
         
         
@@ -88,8 +88,7 @@ class RM_controller(Robot):
                 if not succ:
                     with self.state_lock:
                         self.current_state = arm_state["pose"]
-                        if self._on_state:
-                            self._on_state(self.current_state)
+                        self.emit("state",self.current_state)#调用回调函数
             
                 # 获取夹爪状态
                 succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()

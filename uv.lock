@@ -2,8 +2,15 @@ version = 1
 revision = 3
 requires-python = ">=3.10"
 resolution-markers = [
-    "python_full_version >= '3.11'",
-    "python_full_version < '3.11'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin'",
+    "python_full_version >= '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 
 [[package]]
@@ -100,7 +107,9 @@ name = "numpy"
 version = "2.2.6"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.11'",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/21/7d2a95e4bba9dc13d043ee156a356c0a8f0c6309dff6b21b4d71a073b8a8/numpy-2.2.6.tar.gz", hash = "sha256:e29554e2bef54a90aa5cc07da6ce955accb83f21ab5de01a62c8478897b264fd", size = 20276440, upload-time = "2025-05-17T22:38:04.611Z" }
 wheels = [
@@ -165,7 +174,12 @@ name = "numpy"
 version = "2.3.2"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.11'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin'",
+    "python_full_version >= '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/37/7d/3fec4199c5ffb892bed55cff901e4f39a58c81df9c44c280499e92cad264/numpy-2.3.2.tar.gz", hash = "sha256:e0486a11ec30cdecb53f184d496d1c6a20786c81e55e41640270130056f8ee48", size = 20489306, upload-time = "2025-07-24T21:32:07.553Z" }
 wheels = [
@@ -242,6 +256,24 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/9b/c9/142c1e03f199d202da8e980c2496213509291b6024fd2735ad28ae7065c7/numpy-2.3.2-pp311-pypy311_pp73-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:8446acd11fe3dc1830568c941d44449fd5cb83068e5c70bd5a470d323d448296", size = 14419651, upload-time = "2025-07-24T20:58:59.048Z" },
     { url = "https://files.pythonhosted.org/packages/8b/95/8023e87cbea31a750a6c00ff9427d65ebc5fef104a136bfa69f76266d614/numpy-2.3.2-pp311-pypy311_pp73-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:aa098a5ab53fa407fded5870865c6275a5cd4101cfdef8d6fafc48286a96e981", size = 16760166, upload-time = "2025-07-24T21:28:56.38Z" },
     { url = "https://files.pythonhosted.org/packages/78/e3/6690b3f85a05506733c7e90b577e4762517404ea78bab2ca3a5cb1aeb78d/numpy-2.3.2-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:6936aff90dda378c09bea075af0d9c675fe3a977a9d2402f95a87f440f59f619", size = 12977811, upload-time = "2025-07-24T21:29:18.234Z" },
+]
+
+[[package]]
+name = "opencv-python"
+version = "4.11.0.86"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/17/06/68c27a523103dad5837dc5b87e71285280c4f098c60e4fe8a8db6486ab09/opencv-python-4.11.0.86.tar.gz", hash = "sha256:03d60ccae62304860d232272e4a4fda93c39d595780cb40b161b310244b736a4", size = 95171956, upload-time = "2025-01-16T13:52:24.737Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/05/4d/53b30a2a3ac1f75f65a59eb29cf2ee7207ce64867db47036ad61743d5a23/opencv_python-4.11.0.86-cp37-abi3-macosx_13_0_arm64.whl", hash = "sha256:432f67c223f1dc2824f5e73cdfcd9db0efc8710647d4e813012195dc9122a52a", size = 37326322, upload-time = "2025-01-16T13:52:25.887Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/84/0a67490741867eacdfa37bc18df96e08a9d579583b419010d7f3da8ff503/opencv_python-4.11.0.86-cp37-abi3-macosx_13_0_x86_64.whl", hash = "sha256:9d05ef13d23fe97f575153558653e2d6e87103995d54e6a35db3f282fe1f9c66", size = 56723197, upload-time = "2025-01-16T13:55:21.222Z" },
+    { url = "https://files.pythonhosted.org/packages/f3/bd/29c126788da65c1fb2b5fb621b7fed0ed5f9122aa22a0868c5e2c15c6d23/opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:1b92ae2c8852208817e6776ba1ea0d6b1e0a1b5431e971a2a0ddd2a8cc398202", size = 42230439, upload-time = "2025-01-16T13:51:35.822Z" },
+    { url = "https://files.pythonhosted.org/packages/2c/8b/90eb44a40476fa0e71e05a0283947cfd74a5d36121a11d926ad6f3193cc4/opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:6b02611523803495003bd87362db3e1d2a0454a6a63025dc6658a9830570aa0d", size = 62986597, upload-time = "2025-01-16T13:52:08.836Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/d7/1d5941a9dde095468b288d989ff6539dd69cd429dbf1b9e839013d21b6f0/opencv_python-4.11.0.86-cp37-abi3-win32.whl", hash = "sha256:810549cb2a4aedaa84ad9a1c92fbfdfc14090e2749cedf2c1589ad8359aa169b", size = 29384337, upload-time = "2025-01-16T13:52:13.549Z" },
+    { url = "https://files.pythonhosted.org/packages/a4/7d/f1c30a92854540bf789e9cd5dde7ef49bbe63f855b85a2e6b3db8135c591/opencv_python-4.11.0.86-cp37-abi3-win_amd64.whl", hash = "sha256:085ad9b77c18853ea66283e98affefe2de8cc4c1f43eda4c100cf9b2721142ec", size = 39488044, upload-time = "2025-01-16T13:52:21.928Z" },
 ]
 
 [[package]]
@@ -347,6 +379,38 @@ wheels = [
 ]
 
 [[package]]
+name = "pyorbbecsdk"
+version = "1.3.2"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4d/63/4fcd06707735a930a8d6f4d6c9906c571561222162ec00678770ffbbf0cd/pyorbbecsdk-1.3.2-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:b30f71a6df2a6ca62a9331ccb80fbcb1a74b0c621f1d7e51f19c16b903ed8949", size = 21424931, upload-time = "2024-05-24T14:02:20.698Z" },
+    { url = "https://files.pythonhosted.org/packages/94/3b/1a1be5cdc058609171e9642022e2e838e38b4a9680ef639f31f766ed726a/pyorbbecsdk-1.3.2-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:6d0d72853d70e8389beca809874e2df109fbf266f5f68a5169e717240097c631", size = 68229644, upload-time = "2024-06-11T17:48:56.744Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/c6/581dd8595b631b289186b31a2777e0a523847adec057ad384bbee7292d7c/pyorbbecsdk-1.3.2-cp310-cp310-win32.whl", hash = "sha256:faf6c7e7c3b75258e821ed54e0fd7b06be7b4b249033f0126eac6301eb187e27", size = 68229632, upload-time = "2024-06-11T17:53:59.548Z" },
+    { url = "https://files.pythonhosted.org/packages/53/6e/9277654664d72d76d110f7379017da7df1c8a2ce2870e5a819812b43e96c/pyorbbecsdk-1.3.2-cp310-cp310-win_amd64.whl", hash = "sha256:69f94a27b719b257da8324636077183729a6746ebc609f0c0ac4acea67e05c29", size = 68229636, upload-time = "2024-06-11T17:52:55.713Z" },
+    { url = "https://files.pythonhosted.org/packages/17/62/61e5e623f4623b62f47ace7a6e85a9d251348cb4cb89a97d0bdca20fc190/pyorbbecsdk-1.3.2-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:7c2633304d0ee40d2ab18768e06747a6d8df8381555e4e2c7fbf8390fd7b9fb9", size = 68229645, upload-time = "2024-06-11T17:55:25.314Z" },
+    { url = "https://files.pythonhosted.org/packages/c8/a4/400c0f0505eb7cb9ece78924d95985ed8b61fdca78ddf3d4e597333dbebd/pyorbbecsdk-1.3.2-cp311-cp311-macosx_13_0_universal2.whl", hash = "sha256:67f045bdd51da45bfde6e86c7fe62fc6f461747c9a2fc1ab63feb87c22c82b1f", size = 21424931, upload-time = "2024-05-23T13:49:57.686Z" },
+    { url = "https://files.pythonhosted.org/packages/13/56/947b0488552d63c1e72524a62648d59fefb33e5953c67026dee7857fa707/pyorbbecsdk-1.3.2-cp311-cp311-manylinux1_x86_64.whl", hash = "sha256:08126ce13ec103c09dd2efe2f2165b433dce4b3e8f5c7afbc75ad22327be52de", size = 68229644, upload-time = "2024-06-11T17:51:59.209Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/77/386f91d4b2044dcc3b0d0df0109896e0b2eee49cb7972a9bcf287252f6dd/pyorbbecsdk-1.3.2-cp311-cp311-win32.whl", hash = "sha256:fc2945741fb03acfc3377f74619b03116fb0522509274d2651bdcd32c4c1259b", size = 68229632, upload-time = "2024-06-11T17:54:43.4Z" },
+    { url = "https://files.pythonhosted.org/packages/a0/3e/810be43f6c0283da9f9444f9d38ee3d975faa49ef8546319bee881adaa1b/pyorbbecsdk-1.3.2-cp311-cp311-win_amd64.whl", hash = "sha256:ee64d0f7cbcecaea0359e8048677aa1fd8b57ab9bebc4ce620de4c8534c6b8f3", size = 68229636, upload-time = "2024-06-11T17:51:16.314Z" },
+]
+
+[[package]]
+name = "pyrealsense2"
+version = "2.56.5.9235"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/af/2d/d6d4a12a4af3b944e4ab27850bf1e696fc17fbdccdcd5fbbafadbfbca5a4/pyrealsense2-2.56.5.9235-cp310-cp310-manylinux1_x86_64.whl", hash = "sha256:050301dcb13abe49e14449b010732a5b7ec50d0de829c8f8a9356944518d5784", size = 11064623, upload-time = "2025-07-28T14:59:17.835Z" },
+    { url = "https://files.pythonhosted.org/packages/4c/de/217f2b669efd3c109aab1846088733d5241550ae9267a49149224f3b5d72/pyrealsense2-2.56.5.9235-cp310-cp310-manylinux2014_aarch64.whl", hash = "sha256:d68a174f5c3bf43d6eef3aac0de114b4802052c8a98a92dcbb8ecca0f98509d4", size = 4338854, upload-time = "2025-07-28T14:59:20.079Z" },
+    { url = "https://files.pythonhosted.org/packages/13/36/507114d231a16af6a8836059d8b752a90404020629cb52028cc01a8119b9/pyrealsense2-2.56.5.9235-cp310-cp310-win_amd64.whl", hash = "sha256:c0b097b2b3d340a34fd61ca8c7b46e084ffca490318c4cb7f6af0f8f44f94bd9", size = 7799689, upload-time = "2025-07-28T14:59:21.592Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/ab/f2c066a11f632dfcd79b467e728623da9489ed524eb36ec0cc14b497661a/pyrealsense2-2.56.5.9235-cp311-cp311-manylinux1_x86_64.whl", hash = "sha256:76d384ea99f257b4697a82cb3581b05cc69fadfd0701021ad76da098a3e240f0", size = 11067319, upload-time = "2025-07-28T14:59:23.129Z" },
+    { url = "https://files.pythonhosted.org/packages/c7/c7/c609730c3587c395c3097a98c2d856914997454967bea07b3f8849c4af03/pyrealsense2-2.56.5.9235-cp311-cp311-win_amd64.whl", hash = "sha256:7761f610876c0d0039c9dff71f28ae7e73c77f353f1f3b60fb083350d6acf280", size = 7801923, upload-time = "2025-07-28T14:59:24.986Z" },
+    { url = "https://files.pythonhosted.org/packages/fc/20/a46e60a496a17f1cf0cbdffb45e66dc015756e4dbce83580fd569e53e178/pyrealsense2-2.56.5.9235-cp312-cp312-manylinux1_x86_64.whl", hash = "sha256:ba2c22981111adbefb169c39e023af4352a2409dfbff59f02c2404c68b82064b", size = 11062766, upload-time = "2025-07-28T14:59:26.551Z" },
+    { url = "https://files.pythonhosted.org/packages/22/b5/dd8349abac780aed774f65825fc2ed3ca832b0ad2bf3293262bfa9a517b2/pyrealsense2-2.56.5.9235-cp312-cp312-win_amd64.whl", hash = "sha256:e9c64b94cf6170a3ad60416ff1bf969df8aafe383d4bff14e0fa10b2459d885b", size = 7801788, upload-time = "2025-07-28T14:59:28.303Z" },
+    { url = "https://files.pythonhosted.org/packages/a8/66/fa706f1d906a06d5e7015d5b412a48de9914549792eb5cb53c1854e06427/pyrealsense2-2.56.5.9235-cp313-cp313-manylinux1_x86_64.whl", hash = "sha256:c203bc8c79d5958889681408f1038ee69b0021fd8cba7ff2d4532fc90295c4fc", size = 11062717, upload-time = "2025-07-28T14:59:30.072Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/88/19425ce6fa809d31a8d23f46dfa6aed9b16a881e8a00e0162d4b97ba1e64/pyrealsense2-2.56.5.9235-cp313-cp313-win_amd64.whl", hash = "sha256:ad8012f7fec843c3c6ec8904bfff048806dc7b4c7709e021c6ea75e83d8d5096", size = 7802471, upload-time = "2025-07-28T14:59:31.985Z" },
+]
+
+[[package]]
 name = "pyyaml"
 version = "6.0.2"
 source = { registry = "https://pypi.org/simple" }
@@ -398,7 +462,10 @@ dependencies = [
     { name = "fastapi" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "numpy", version = "2.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "opencv-python" },
     { name = "pydantic" },
+    { name = "pyorbbecsdk" },
+    { name = "pyrealsense2" },
     { name = "pyyaml" },
     { name = "robotic-arm" },
     { name = "scipy", version = "1.15.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -410,7 +477,10 @@ dependencies = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116.1" },
     { name = "numpy", specifier = ">=2.2.6" },
+    { name = "opencv-python", specifier = ">=4.11.0.86" },
     { name = "pydantic", specifier = ">=2.11.7" },
+    { name = "pyorbbecsdk", specifier = ">=1.3.2" },
+    { name = "pyrealsense2", specifier = ">=2.56.5.9235" },
     { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "robotic-arm", specifier = ">=1.1.1" },
     { name = "scipy", specifier = ">=1.15.3" },
@@ -431,7 +501,9 @@ name = "scipy"
 version = "1.15.3"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version < '3.11'",
+    "python_full_version < '3.11' and sys_platform == 'darwin'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
@@ -490,7 +562,12 @@ name = "scipy"
 version = "1.16.1"
 source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
-    "python_full_version >= '3.11'",
+    "python_full_version >= '3.12' and sys_platform == 'darwin'",
+    "python_full_version >= '3.12' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version >= '3.12' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform != 'darwin' and sys_platform != 'linux')",
+    "python_full_version == '3.11.*' and sys_platform == 'darwin'",
+    "python_full_version == '3.11.*' and platform_machine == 'aarch64' and sys_platform == 'linux'",
+    "(python_full_version == '3.11.*' and platform_machine != 'aarch64' and sys_platform == 'linux') or (python_full_version == '3.11.*' and sys_platform != 'darwin' and sys_platform != 'linux')",
 ]
 dependencies = [
     { name = "numpy", version = "2.3.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
