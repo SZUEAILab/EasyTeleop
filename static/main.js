@@ -93,13 +93,29 @@ window.showTeleopModal = async function (group = null) {
 
 // 渲染遥操作组列表（示例）
 async function renderTeleopGroups() {
-  // 可根据实际API获取所有组
-  // 这里只做演示，假设有API /teleop/list 返回所有组
-  // 你可根据实际后端实现调整
-  // 示例：
-  // const res = await fetch('/teleop/list');
-  // const groups = await res.json();
-  // groups.forEach(group => ...)
+  const containerId = 'teleop-groups';
+  let container = document.getElementById(containerId);
+  // 获取所有遥操作组
+  let groups = [];
+  try {
+    const res = await fetch('/teleop/list');
+    groups = await res.json();
+  } catch { }
+  container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groups.map(group => `
+    <div class="p-4 bg-white rounded shadow flex flex-col gap-2 border border-gray-200">
+      <div class="font-bold text-blue-600">组ID: ${group.id}</div>
+      <div>左臂: ${group.config.left_arm || '无'} | 右臂: ${group.config.right_arm || '无'} | 头显: ${group.config.vr || '无'}</div>
+      <div>摄像头: ${group.config.head_camera || '无'} / ${group.config.left_camera || '无'} / ${group.config.right_camera || '无'}</div>
+      <div class="flex gap-2 mt-2">
+        <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick='showTeleopModal(${JSON.stringify(group)})'>配置</button>
+        <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700" onclick='deleteTeleopGroup("${group.id}")'>删除</button>
+        <button class="px-2 py-1 ${group.running ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded" onclick='${group.running ? `stopTeleopGroup("${group.id}")` : `startTeleopGroup("${group.id}")`}'>${group.running ? '停止' : '启动'}</button>
+      </div>
+    </div>
+    
+  `).join('')}</div>
+  <div class="flex justify-start mt-4"><button id="addTeleopBtn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick='showTeleopModal()'>新建遥操作组</button></div>
+  `;
 }
 // Tailwind UI重构入口
 document.addEventListener('DOMContentLoaded', () => {
