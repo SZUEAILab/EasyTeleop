@@ -1,3 +1,6 @@
+
+
+
 import yaml
 from fastapi import FastAPI, HTTPException, Body
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +16,46 @@ from Camera.RealSenseCamera import RealSenseCamera
 from Robots.RealMan import RM_controller
 from VRSocket import VRSocket
 from Teleoperation import Teleoperation
+
+# 遥操作组管理
+TELEOP_GROUPS = {}
+
+class TeleopGroup:
+    def __init__(self, group_id, config):
+        self.id = group_id
+        self.config = config
+        self.teleop = None
+        self.running = False
+
+    def start(self):
+        # 按照配置引用device_pool
+        self.teleop = Teleoperation()
+        # 左手臂
+        left_id = self.config.get('left_arm')
+        left_arm = device_pool['arm'].get(left_id)
+        if left_arm:
+            self.teleop.on("leftGripDown", left_arm.start_control)
+            self.teleop.on("leftGripUp", left_arm.stop_control)
+        # 右手臂
+        right_id = self.config.get('right_arm')
+        right_arm = device_pool['arm'].get(right_id)
+        if right_arm:
+            self.teleop.on("rightGripDown", right_arm.start_control)
+            self.teleop.on("rightGripUp", right_arm.stop_control)
+        # VR头显
+        vr_id = self.config.get('vr')
+        vr = device_pool['vr'].get(vr_id)
+        if vr:
+            vr.on_message(self.teleop.handle_socket_data)
+            vr.start()
+        # 摄像头（可选）
+        # 可按需扩展摄像头相关逻辑
+        self.running = True
+        threading.Thread(target=self.teleop.start, daemon=True).start()
+
+    def stop(self):
+        # 仅停止teleop逻辑，不操作设备
+        self.running = False
 
 
 def init_device_tables(db_path):
@@ -286,7 +329,68 @@ def get_device_conn_status(category: str, id: int):
         status = 1 if device.is_connected() else 2
     else:
         status = 0
-    return {"conn_status": status}
+
+
+
+# 获取所有遥操作组列表
+@app.get("/teleop/list")
+def list_teleop_groups():
+    return [
+        {"id": g.id, "config": g.config, "running": g.running}
+        for g in TELEOP_GROUPS.values()
+    ]
+
+# 创建遥操作组
+@app.post("/teleop/{group_id}")
+def create_teleop_group(group_id: str, body: dict = Body(...)):
+    if group_id in TELEOP_GROUPS:
+        raise HTTPException(400, "遥操作组已存在")
+    TELEOP_GROUPS[group_id] = TeleopGroup(group_id, body)
+    return {"msg": "遥操作组已创建"}
+
+# 更新遥操作组
+@app.put("/teleop/{group_id}")
+def update_teleop_group(group_id: str, body: dict = Body(...)):
+    if group_id not in TELEOP_GROUPS:
+        raise HTTPException(404, "遥操作组不存在")
+    TELEOP_GROUPS[group_id].config = body
+    return {"msg": "遥操作组已更新"}
+
+# 删除遥操作组
+@app.delete("/teleop/{group_id}")
+def delete_teleop_group(group_id: str):
+    if group_id not in TELEOP_GROUPS:
+        raise HTTPException(404, "遥操作组不存在")
+    del TELEOP_GROUPS[group_id]
+    return {"msg": "遥操作组已删除"}
+
+# 获取遥操作组配置
+@app.get("/teleop/{group_id}")
+def get_teleop_group(group_id: str):
+    group = TELEOP_GROUPS.get(group_id)
+    if not group:
+        raise HTTPException(404, "遥操作组不存在")
+    return {"id": group.id, "config": group.config, "running": group.running}
+
+# 启动遥操作组
+@app.post("/teleop/{group_id}/start")
+def start_teleop_group(group_id: str):
+    group = TELEOP_GROUPS.get(group_id)
+    if not group:
+        raise HTTPException(404, "遥操作组不存在")
+    group.start()
+    return {"msg": "遥操作已启动"}
+
+# 停止遥操作组
+@app.post("/teleop/{group_id}/stop")
+def stop_teleop_group(group_id: str):
+    group = TELEOP_GROUPS.get(group_id)
+    if not group:
+        raise HTTPException(404, "遥操作组不存在")
+    group.stop()
+    return {"msg": "遥操作已停止"}
+
+
 
 app.mount("/", StaticFiles(directory="static"), name="index")
 
