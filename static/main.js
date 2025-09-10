@@ -165,12 +165,13 @@ document.addEventListener('DOMContentLoaded', () => {
         )).then(devicesWithStatus => {
           deviceCards.innerHTML = '';
           devicesWithStatus.forEach(({ category, dev, connStatus }) => {
+            console.log(connStatus)
             let statusColor = 'gray';
             let statusText = '未连接';
-            if (connStatus === 1) { statusColor = 'green'; statusText = '已连接'; }
-            if (connStatus === 2) { statusColor = 'red'; statusText = '断开'; }
+            if (connStatus == 1) { statusColor = 'green'; statusText = '已连接'; }
+            if (connStatus == 2) { statusColor = 'red'; statusText = '断开'; }
             let actionBtn = '';
-            if (connStatus === 0) {
+            if (connStatus == 0) {
               actionBtn = `<button class="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600" onclick="startDevice('${category}',${dev.id})">启动</button>`;
             } else {
               actionBtn = `<button class="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600" onclick="stopDevice('${category}',${dev.id})">停止</button>`;

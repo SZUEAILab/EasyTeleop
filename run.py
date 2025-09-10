@@ -15,22 +15,22 @@ if __name__ == '__main__':
             dc.put_robot_state(state)
             # print(f"Left Arm State: {state}")
 
-        l_arm.on("state", print_left_arm_state)
+        # l_arm.on("state", print_left_arm_state)
 
-        l_arm.start()
+        # l_arm.start()
         r_arm.start()
         # 启动遥操作
         vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
         
         teleop = Teleoperation()
         # 注册回调函数
-        teleop.on("leftGripDown",l_arm.start_control)
-        teleop.on("leftGripUp",l_arm.stop_control)
+        # teleop.on("leftGripDown",l_arm.start_control)
+        # teleop.on("leftGripUp",l_arm.stop_control)
         teleop.on("rightGripDown",r_arm.start_control)
         teleop.on("rightGripUp",r_arm.stop_control)
         
         #注册回调函数
-        vrsocket.on_message(teleop.handle_socket_data)
+        vrsocket.on("message",teleop.handle_socket_data)
         
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响
         

@@ -6,10 +6,12 @@ class VRSocket:
         # 初始化 socket 连接
         self.ip = config["ip"]
         self.port = int(config["port"])
-
-        self._on_message = self._default_callback
-        self._on_disconnect = self._default_callback
-        self._on_connect = self._default_callback
+        
+        self._events = {
+             "message": self._default_callback,
+             "disconnect": self._default_callback,
+             "connect": self._default_callback,
+        }
 
         # 连接状态: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接(红色)
         self._conn_status = 0
@@ -29,18 +31,29 @@ class VRSocket:
         """
         if status in (0, 1, 2):
             self._conn_status = status
+            
+    def on(self, event_name: str, callback):
+        """注册事件回调函数"""
+        # 如果事件不存在
+        if event_name not in self._events:
+            return
+        # 将回调函数添加到事件列表中
+        self._events[event_name] = callback
 
-    def _default_callback(self):
+    def off(self, event_name: str):
+        """移除事件回调函数"""
+        if event_name not in self._events:
+            return
+        del self._events[event_name]
+
+    def emit(self, event_name: str, *args, **kwargs):
+        """触发事件，执行所有注册的回调函数"""
+        if event_name not in self._events:
+            return
+        self._events[event_name](*args, **kwargs)
+
+    def _default_callback(self,*args, **kwargs):
         pass
-    
-    def on_message(self,callback):
-        self._on_message = callback
-        
-    def on_disconnect(self,callback):
-        self._on_disconnect = callback
-        
-    def on_connect(self,callback):
-        self._on_connect = callback
         
     def connect(self):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -71,7 +84,7 @@ class VRSocket:
                         continue
                     try:
                         msg = json.loads(line)
-                        self._on_message(msg)
+                        self.emit("message",msg)
                     except json.JSONDecodeError as e:
                         print("[JSON解析失败]", e)
                         break

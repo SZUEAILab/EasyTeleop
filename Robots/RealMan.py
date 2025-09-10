@@ -46,7 +46,7 @@ class RM_controller(Robot):
             raise ConnectionError(f"Failed to initialize robot arm: {str(e)}")
         # 启动轮询线程
         self.start_polling()
-
+        self.set_conn_status(1)
         print("[Initialize]Robot arm initialized and polling started.")
         
         # 获取初始状态

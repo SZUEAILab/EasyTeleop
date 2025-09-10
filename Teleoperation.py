@@ -56,20 +56,8 @@ class Teleoperation:
             return
         self._events[event_name](*args, **kwargs)
         
-    def _default_callback(self):
+    def _default_callback(self,*args, **kwargs):
         pass
-    
-    def on_left_grip_up(self,callback):
-        self._on_left_grip_up = callback
-        
-    def on_left_grip_down(self,callback):
-        self._on_left_grip_down = callback
-        
-    def on_right_grip_up(self,callback):
-        self._on_right_grip_up = callback
-        
-    def on_right_grip_down(self,callback):
-        self._on_right_grip_down = callback
 
     def start(self):
         # 多线程
@@ -169,7 +157,7 @@ class Teleoperation:
                 debug_print("右手坐标为0，丢弃该条信息", True)
             else:
                 if data_dict['rightGrip']==True:
-                    self.emit("rightGripDown",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
+                    self.emit("rightGripDown",[x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
                     # self.right_wrist_controller.start_control([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
                 else:
                     self.emit("rightGripUp")

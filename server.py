@@ -46,12 +46,11 @@ class TeleopGroup:
         vr_id = self.config.get('vr')
         vr = device_pool['vr'].get(vr_id)
         if vr:
-            vr.on_message(self.teleop.handle_socket_data)
+            vr.on("message",self.teleop.handle_socket_data)
             vr.start()
         # 摄像头（可选）
         # 可按需扩展摄像头相关逻辑
         self.running = True
-        threading.Thread(target=self.teleop.start, daemon=True).start()
 
     def stop(self):
         # 仅停止teleop逻辑，不操作设备
@@ -320,15 +319,18 @@ def delete_device(category: str, id: int):
 def get_device_conn_status(category: str, id: int):
     pool = device_pool.get(category, {})
     if id not in pool:
-        return {"conn_status": 0}  # 未连接
-    device = pool[id]
-    if hasattr(device, 'get_conn_status'):
-        status = device.get_conn_status()
-    elif hasattr(device, 'is_connected'):
-        # 兼容部分Camera类
-        status = 1 if device.is_connected() else 2
+        status = 0  # 未连接
     else:
-        status = 0
+        device = pool[id]
+        if hasattr(device, 'get_conn_status'):
+            status = device.get_conn_status()
+        elif hasattr(device, 'is_connected'):
+            # 兼容部分Camera类
+            status = 1 if device.is_connected() else 2
+        else:
+            status = 0
+    print(f"[ConnStatus] category={category}, id={id}, status={status}")
+    return {"conn_status": status}
 
 
 

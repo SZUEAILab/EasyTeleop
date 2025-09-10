@@ -1,3 +1,4 @@
+
 # EasyTeleop 遥操作管理平台 API 文档（卡片式设备管理）
 
 ## 设备列表与详情
@@ -21,6 +22,18 @@
 - 返回：
 ```json
 { "id": 3, "type": "RealSense", "config": {...} }
+```
+
+### GET /device/{category}/adapted_types
+- 描述：获取设备类型及对应配置字段。
+- 路径参数：
+  - category: "vr" | "arm" | "camera"
+- 返回：
+```json
+{
+  "RealMan": ["ip", "port"],
+  "TestArm": ["ip", "port", "model"]
+}
 ```
 
 ---
@@ -76,6 +89,103 @@
 - 返回：
 ```json
 { "msg": "设备已停止并删除" }
+```
+
+### DELETE /device/{category}/{id}/delete
+- 描述：彻底删除设备（从数据库移除）。
+- 路径参数：
+  - category: "vr" | "arm" | "camera"
+  - id: 设备ID
+- 返回：
+```json
+{ "msg": "设备已彻底删除" }
+```
+
+### GET /device/{category}/{id}/conn_status
+- 描述：获取设备连接状态（前端可轮询）。
+- 路径参数：
+  - category: "vr" | "arm" | "camera"
+  - id: 设备ID
+- 返回：
+```json
+{ "conn_status": 0 }
+```
+- 状态码说明：
+  - 0: 未连接
+  - 1: 已连接
+  - 2: 断开/异常
+
+---
+
+## 遥操作组管理
+
+### GET /teleop/list
+- 描述：获取所有遥操作组列表。
+- 返回：
+```json
+[{ "id": "group1", "config": {...}, "running": true }]
+```
+
+### POST /teleop/{group_id}
+- 描述：创建遥操作组。
+- 路径参数：
+  - group_id: 组ID
+- 请求体（JSON）：
+```json
+{ "left_arm": 1, "right_arm": 2, "vr": 3 }
+```
+- 返回：
+```json
+{ "msg": "遥操作组已创建" }
+```
+
+### PUT /teleop/{group_id}
+- 描述：更新遥操作组配置。
+- 路径参数：
+  - group_id: 组ID
+- 请求体（JSON）：
+```json
+{ ... }
+```
+- 返回：
+```json
+{ "msg": "遥操作组已更新" }
+```
+
+### DELETE /teleop/{group_id}
+- 描述：删除遥操作组。
+- 路径参数：
+  - group_id: 组ID
+- 返回：
+```json
+{ "msg": "遥操作组已删除" }
+```
+
+### GET /teleop/{group_id}
+- 描述：获取遥操作组详情。
+- 路径参数：
+  - group_id: 组ID
+- 返回：
+```json
+{ "id": "group1", "config": {...}, "running": true }
+```
+
+### POST /teleop/{group_id}/start
+- 描述：启动遥操作组。
+- 路径参数：
+  - group_id: 组ID
+- 返回：
+```json
+{ "msg": "遥操作已启动" }
+```
+
+### POST /teleop/{group_id}/stop
+- 描述：停止遥操作组。
+- 路径参数：
+  - group_id: 组ID
+- 返回：
+```json
+{ "msg": "遥操作已停止" }
 ```
 
 ---
