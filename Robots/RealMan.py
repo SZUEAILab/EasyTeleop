@@ -9,10 +9,10 @@ class RM_controller(Robot):
     """
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
-    def __init__(self, ip, port=8080, thread_mode=rm_thread_mode_e.RM_TRIPLE_MODE_E, poll_interval=0.01):
-        super().__init__(ip)
-        
-        self.port = port
+    def __init__(self, config, thread_mode=rm_thread_mode_e.RM_TRIPLE_MODE_E, poll_interval=0.01):
+        super().__init__(config)
+        self.ip = config["ip"]
+        self.port = config.get("port", 8080)
         self.thread_mode = thread_mode
         
         
@@ -82,15 +82,15 @@ class RM_controller(Robot):
             self.polling_thread = None
 
     def _poll_state(self):
-        """轮询状态的内部方法，在单独线程中运行"""
         while self.polling_running:
             try:
-                # 获取手臂状态
                 succ, arm_state = self.arm_controller.rm_get_current_arm_state()
                 if not succ:
                     with self.state_lock:
                         self.current_state = arm_state["pose"]
-                
+                        if self._on_state:
+                            self._on_state(self.current_state)
+            
                 # 获取夹爪状态
                 succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
                 if not succ_gripper:

@@ -2,11 +2,11 @@ import socket
 import json
 import threading
 class VRSocket:
-    def __init__(self,ip,port = 12345):
+    def __init__(self, config):
         # 初始化 socket 连接
-        self.ip = ip
-        self.port = port
-        
+        self.ip = config["ip"]
+        self.port = config.get("port", 12345)
+
         self._on_message = self._default_callback
         self._on_disconnect = self._default_callback
         self._on_connect = self._default_callback

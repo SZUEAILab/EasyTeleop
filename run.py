@@ -3,18 +3,13 @@ from VRSocket import VRSocket
 from Robots.RealMan import RM_controller
 
 if __name__ == '__main__':
-    # 配置
-    VR_IP = '192.168.0.20'
-    VR_PORT = 12345
-    L_RM_IP = '192.168.0.18'
-    R_RM_IP = '192.168.0.19'
     try:
-        l_arm = RM_controller(L_RM_IP)
-        r_arm = RM_controller(R_RM_IP)
+        l_arm = RM_controller({"ip": "192.168.0.18", "port": 8080})
+        r_arm = RM_controller({"ip": "192.168.0.19", "port": 8080})
         l_arm.start()
         r_arm.start()
         # 启动遥操作
-        vrsocket = VRSocket(VR_IP, VR_PORT)
+        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
         
         teleop = Teleoperation()
         # 注册回调函数

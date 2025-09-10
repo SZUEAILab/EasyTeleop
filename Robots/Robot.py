@@ -9,9 +9,16 @@ class Robot:
     - get_state(self): 获取当前位姿（位置+姿态，返回格式由子类定义）。
     - get_gripper(self): 获取当前夹爪状态（返回格式由子类定义）。
     """
-    def __init__(self, ip):
-        self.ip = ip
-        
+    def __init__(self, config):
+        self.config = config
+        self._state = None
+        self._gripper = None
+        self._on_state = None  # 新增回调接口
+
+    def on_state(self, callback):
+        """设置状态更新回调函数"""
+        self._on_state = callback
+
     def start(self):
         """
         启动某些线程或初始化操作。
