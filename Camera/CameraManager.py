@@ -50,7 +50,7 @@ class CameraManager:
                 if instance.connect():
                     self.register_camera(instance)
                 else:
-                    instance.logger_msg("failed to connect, will not be registered.")
+                    print("failed to connect, will not be registered.")
             else:
                 print(f"[CameraManager] Error: Camera type '{cam_type}' not recognized.")
     
@@ -63,9 +63,9 @@ class CameraManager:
         key = f"{camera.camera_type}_{camera.camera_position}"
         if key not in self._cameras:
             self._cameras[key] = camera
-            camera.logger_msg("registered successfully")
+            print("registered successfully")
         else:
-            camera.logger_msg("already registered")
+            print("already registered")
     
     def get_frames(self) -> Dict[str, Tuple[np.ndarray, np.ndarray]]:
         """获取所有摄像头的帧数据
@@ -84,7 +84,7 @@ class CameraManager:
                 frame_time = time.time()
                 frames[key] = (rgb_frame, depth_frame, frame_time)
             else:
-                camera.logger_msg("not connected, cannot get frames")
+                print("not connected, cannot get frames")
         return frames
     
 if __name__ == "__main__":

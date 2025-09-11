@@ -288,8 +288,9 @@ def start_device(category: str, id: int):
     conn.close()
     if not row:
         raise HTTPException(404, "设备不存在或未启用")
+    # 初始化对象,about bussiness logic
     type_, config = row[0], json.loads(row[1])
-    # 初始化对象
+    
     obj = create_device_instance(category, type_, config)
     if obj and hasattr(obj, 'start'):
         obj.start()
@@ -390,6 +391,7 @@ def get_teleop_group(group_id: str):
 
 # 启动遥操作组
 @app.post("/teleop/{group_id}/start")
+# about bussiness logic
 def start_teleop_group(group_id: str):
     group = TELEOP_GROUPS.get(group_id)
     if not group:

@@ -7,12 +7,9 @@ from abc import ABC, abstractmethod
 # # 定义摄像头接口，方便获取图片帧和信息
 class BaseCamera(ABC):
     """摄像头接口抽象类"""
-    def __init__(self, camera_type: str, camera_position:str, camera_serial: str):
+    def __init__(self,config: str):
         # 属性：设备名称，设备位置，序列号
-        self.camera_type = camera_type
-        self.camera_position = camera_position
-        self.camera_serial = camera_serial
-        self.logger = logging.getLogger(f"{self.__class__.__name__}_{self.camera_position}")
+        self.config = config
         self._events = {
              "state": self._default_callback,
         }
@@ -57,8 +54,6 @@ class BaseCamera(ABC):
         if status in (0, 1, 2):
             self._conn_status = status
 
-    def logger_msg(self,msg:str):
-        print(f"[{self.camera_type}][{self.camera_position}] {msg}")
 
     @abstractmethod
     def connect(self) -> bool:

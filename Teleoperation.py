@@ -116,7 +116,6 @@ class Teleoperation:
         """
         处理从 socket 接收到的数据，并根据事件字段触发回调
         """
-        print(data_dict)
         try:
             # 提取左臂位置和旋转角度
             left_pos = data_dict['leftPos']

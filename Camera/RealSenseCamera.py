@@ -2,6 +2,8 @@ import cv2
 import numpy as np
 from typing import Dict, Any, Tuple
 import pyrealsense2 as rs
+import threading
+import time
 # from pyorbbecsdk import *
 from .BaseCamera import BaseCamera
 
@@ -15,25 +17,68 @@ CAMERA_SERIALS = {
 class RealSenseCamera(BaseCamera):
     """RealSense摄像头设备实现"""
     
-    def __init__(self, camera_type: str, camera_position:str, camera_serial: str):
-        super().__init__(camera_type, camera_position, camera_serial)
+    def __init__(self, config: str, poll_interval=0.01):
+        super().__init__(config)
+        self.poll_interval = poll_interval  # 轮询间隔（秒）
+        self.polling_thread = None
+        self.polling_running = False
         self.pipeline = None    # 存储pipeline对象
-        self.config = rs.config()  
+        self.rsconfig = rs.config()  
+
+    def start(self):
+        self.start_polling()
+
+    def start_polling(self):
+        """启动状态轮询线程"""
+        if not self.polling_running:
+            self.polling_running = True
+            self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
+            self.polling_thread.start()
+
+    def stop_polling(self):
+        """停止状态轮询线程"""
+        self.polling_running = False
+        if self.polling_thread is not None:
+            self.polling_thread.join()
+            self.polling_thread = None
+
+    def _poll_state(self):
+        while self.polling_running:
+            try:
+                succ, arm_state = self.arm_controller.rm_get_current_arm_state()
+                if not succ:
+                    with self.state_lock:
+                        self.current_state = arm_state["pose"]
+                        self.emit("state",self.current_state)#调用回调函数
+            
+                # 获取夹爪状态
+                succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
+                if not succ_gripper:
+                    with self.state_lock:
+                        self.current_gripper_state = gripper_state
+                
+            except Exception as e:
+                print(f"Error polling robot state: {str(e)}")
+                break
+            
+            time.sleep(self.poll_interval)
     
     def connect(self, **kwargs) -> bool:
         """连接RealSense摄像头"""
         try:
             self.pipeline = rs.pipeline()
-            self.config.enable_device(CAMERA_SERIALS[self.camera_type][self.camera_position])
-            self.config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-            self.config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-            self.pipeline.start(self.config)
+            self.rsconfig.enable_device(self.config["serial"])
+            self.rsconfig.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+            self.rsconfig.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            profile = self.pipeline.start(self.rsconfig)
+            device = profile.get_device()
+            device.hardware_reset()
             self.set_conn_status(1)
-            self.logger_msg(f"connected successfully")
+            print(f"connected successfully")
             return True
         except Exception as e:
             self.set_conn_status(2)
-            self.logger_msg(f"connect failed: {str(e)}")
+            print(f"connect failed: {str(e)}")
             return False
     
     def disconnect(self) -> bool:
@@ -43,11 +88,11 @@ class RealSenseCamera(BaseCamera):
                 self.pipeline.stop()
                 self.pipeline = None
             self.set_conn_status(2)
-            self.logger_msg(f"disconnected successfully")
+            print(f"disconnected successfully")
             return True
         except Exception as e:
             self.set_conn_status(2)
-            self.logger_msg(f"disconnect failed: {str(e)}")
+            print(f"disconnect failed: {str(e)}")
             return False
     
     def is_connected(self) -> bool:
@@ -67,22 +112,22 @@ class RealSenseCamera(BaseCamera):
     def get_frames(self) -> Tuple[np.ndarray, np.ndarray]:
         """获取RealSense摄像头帧(RGB, Depth)"""
         if not self.is_connected():
-            self.logger_msg("not connected")
+            print("not connected")
             return None, None
         
         frames = self.pipeline.wait_for_frames()
         color_frame = frames.get_color_frame()
         depth_frame = frames.get_depth_frame()
         if not color_frame or not depth_frame:
-            self.logger_msg(f"Failed to get frames from RealSense")
+            print(f"Failed to get frames from RealSense")
             return None, None
         return np.asanyarray(color_frame.get_data()), np.asanyarray(depth_frame.get_data())
 
 
 
 if __name__ == "__main__":
-    camera1 = RealSenseCamera("RealSense", "left_wrist")
-    camera2 = RealSenseCamera("RealSense", "right_wrist")
+    camera1 = RealSenseCamera({"serial":"153122070447"})
+    camera2 = RealSenseCamera({"serial":"427622270438"})
     camera1.connect()
     camera2.connect()
     for i in range(50):
