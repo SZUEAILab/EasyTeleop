@@ -1,5 +1,5 @@
 from Teleoperation import Teleoperation
-from VRSocket import VRSocket
+from Devices.VRSocket import VRSocket
 from Robots.RealMan import RM_controller
 from DataCollect import DataCollect
 from Camera.RealSenseCamera import RealSenseCamera

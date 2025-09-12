@@ -14,7 +14,7 @@ import json
 
 from Camera.RealSenseCamera import RealSenseCamera
 from Robots.RealMan import RM_controller
-from VRSocket import VRSocket
+from Devices.VRSocket import VRSocket
 from Teleoperation import Teleoperation
 
 # 遥操作组管理
