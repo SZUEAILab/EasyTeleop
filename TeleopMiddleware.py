@@ -6,7 +6,7 @@ import time
 import math
 from scipy.spatial.transform import Rotation as R  # 需要安装 scipy
 
-class Teleoperation:
+class TeleopMiddleware:
     def __init__(self,left_wrist_controller = None,right_wrist_controller = None):
         # 用字典存储事件与回调的映射，格式: {事件名: [回调1, 回调2, ...]}
         self._events = {

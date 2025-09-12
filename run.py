@@ -1,6 +1,6 @@
-from Teleoperation import Teleoperation
-from Devices.VRSocket import VRSocket
-from Devices.Robots.RealMan import RM_controller
+from TeleopMiddleware import TeleopMiddleware
+from Device.VR.VRSocket import VRSocket
+from Device.Robot.RealMan import RM_controller
 from DataCollect import DataCollect
 from Camera.RealSenseCamera import RealSenseCamera
 import cv2

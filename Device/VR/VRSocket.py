@@ -1,7 +1,7 @@
 import socket
 import json
 import threading
-from .BaseDevice import BaseDevice
+from ..BaseDevice import BaseDevice
 
 
 class VRSocket(BaseDevice):
