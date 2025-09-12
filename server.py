@@ -13,7 +13,7 @@ import os
 import json
 
 from Camera.RealSenseCamera import RealSenseCamera
-from Robots.RealMan import RM_controller
+from Devices.Robots.RealMan import RM_controller
 from Devices.VRSocket import VRSocket
 from Teleoperation import Teleoperation
 

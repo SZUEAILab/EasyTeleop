@@ -74,7 +74,13 @@ class BaseDevice(ABC):
         """
         if status in (0, 1, 2) and status != self._conn_status:
             self._conn_status = status
-            
+    
+    def get_need_config(self) -> Dict[str, Any]:
+        """
+        获取当前设备配置
+        :return: 配置字典
+        """
+        return self.need_config
     @abstractmethod
     def set_config(self, config: Dict[str, Any]) -> bool:
         """
@@ -99,19 +105,3 @@ class BaseDevice(ABC):
         :return: 是否停止成功
         """
         pass
-
-    def validate_config(self, config: Dict[str, Any]) -> Tuple[bool, str]:
-        """
-        验证配置是否满足需求
-        :param config: 待验证的配置
-        :return: (是否有效, 错误信息)
-        """
-        for key in self.need_config:
-            if key not in config:
-                return False, f"缺少必要配置项: {key}"
-            # 检查类型（如果定义了类型要求）
-            required_type = self.need_config[key]
-            if required_type is not None and not isinstance(config[key], required_type):
-                return False, f"配置项{key}类型错误，需要{required_type}，实际是{type(config[key])}"
-            
-        return True, "配置有效"

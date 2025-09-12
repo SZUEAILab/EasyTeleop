@@ -3,17 +3,29 @@ import time
 import numpy as np
 import threading
 from threading import Lock
+from typing import Dict, Any
 from .Robot import Robot
 
 class RM_controller(Robot):
     """
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
-    def __init__(self, config, thread_mode=rm_thread_mode_e.RM_TRIPLE_MODE_E, poll_interval=0.01):
+    def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.ip = config["ip"]
-        self.port = int(config["port"])
-        self.thread_mode = thread_mode
+        
+        # 定义需要的配置字段
+        self.need_config = {
+            "ip": "服务器IP地址",
+            "port": "服务器端口号",
+        }
+        self.ip = None
+        self.port = None
+        
+        self.poll_interval = 0.01  # 轮询间隔（秒）
+        
+        self.arm_controller = None
+        self.handle = None
+        self.thread_mode = rm_thread_mode_e.RM_TRIPLE_MODE_E
         
         
         # 状态存储变量
@@ -21,7 +33,7 @@ class RM_controller(Robot):
         self.current_gripper_state = None
         
         # 线程相关变量
-        self.poll_interval = poll_interval  # 轮询间隔（秒）
+        
         self.polling_thread = None
         self.polling_running = False
         self.state_lock = Lock()  # 用于线程安全访问状态变量
@@ -34,6 +46,22 @@ class RM_controller(Robot):
         self.delta = [0, 0, 0 , 0 , 0 , 0]
         
         
+    def set_config(self, config):
+        """
+        设置设备配置，验证配置是否符合need_config要求
+        :param config: 配置字典
+        :return: 是否设置成功
+        """
+        # 检查必需的配置字段
+        for key in self.need_config:
+            if key not in config:
+                raise ValueError(f"缺少必需的配置字段: {key}")
+        
+        self.config = config
+        self.ip = config["ip"]
+        self.port = int(config["port"])
+        
+        return True
         
     def start(self):
         try:
@@ -45,7 +73,8 @@ class RM_controller(Robot):
         except Exception as e:
             raise ConnectionError(f"Failed to initialize robot arm: {str(e)}")
         # 启动轮询线程
-        self.start_polling()
+        self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
+        self.polling_thread.start()
         self.set_conn_status(1)
         print("[Initialize]Robot arm initialized and polling started.")
         
@@ -67,19 +96,16 @@ class RM_controller(Robot):
             self.stop_polling()
             raise RuntimeError(f"Failed to get initial robot state: {str(e)}")
 
-    def start_polling(self):
-        """启动状态轮询线程"""
-        if not self.polling_running:
-            self.polling_running = True
-            self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
-            self.polling_thread.start()
-
-    def stop_polling(self):
-        """停止状态轮询线程"""
-        self.polling_running = False
+    def stop(self):
+        """停止设备"""
         if self.polling_thread is not None:
             self.polling_thread.join()
             self.polling_thread = None
+        self.arm_controller.rm_destroy_robot_arm(self.handle)
+        self.set_conn_status(0)
+        print("[Shutdown]Robot arm stopped and disconnected.")
+        
+        return True
 
     def _poll_state(self):
         while self.polling_running:
@@ -213,7 +239,9 @@ class RM_controller(Robot):
     def __del__(self):
         try:
             # 停止轮询线程
-            self.stop_polling()
+            if self.polling_thread is not None:
+                self.polling_thread.join()
+                self.polling_thread = None
             
             if hasattr(self, 'arm_controller'):
                 # 可能的其他清理操作

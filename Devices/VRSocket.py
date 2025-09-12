@@ -44,10 +44,6 @@ class VRSocket(BaseDevice):
         self.ip = config["ip"]
         self.port = int(config["port"])
         
-        # 重新初始化接收线程
-        if self.receiver_thread is None or not self.receiver_thread.is_alive():
-            self.receiver_thread = threading.Thread(target=self.socket_receiver, daemon=True)
-        
         return True
 
     def connect(self):
