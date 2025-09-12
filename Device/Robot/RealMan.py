@@ -10,14 +10,15 @@ class RM_controller(Robot):
     """
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
+    # 定义需要的配置字段为静态字段
+    need_config = {
+        "ip": "服务器IP地址",
+        "port": "服务器端口号",
+    }
+    
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         
-        # 定义需要的配置字段
-        self.need_config = {
-            "ip": "服务器IP地址",
-            "port": "服务器端口号",
-        }
         self.ip = None
         self.port = None
         

@@ -182,24 +182,57 @@ document.addEventListener('DOMContentLoaded', () => {
           deviceCards.innerHTML = '';
           devicesWithStatus.forEach(({ category, dev, connStatus }) => {
             console.log(connStatus)
+            // 根据连接状态设置颜色和文本
             let statusColor = 'gray';
             let statusText = '未连接';
-            if (connStatus == 1) { statusColor = 'green'; statusText = '已连接'; }
-            if (connStatus == 2) { statusColor = 'red'; statusText = '断开'; }
+            let statusBgColor = 'bg-gray-500';
+            if (connStatus == 1) { 
+              statusColor = 'green'; 
+              statusText = '已连接'; 
+              statusBgColor = 'bg-green-500';
+            }
+            if (connStatus == 2) { 
+              statusColor = 'red'; 
+              statusText = '断开'; 
+              statusBgColor = 'bg-red-500';
+            }
+            
             let actionBtn = '';
             if (connStatus == 0) {
               actionBtn = `<button class="px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600" onclick="startDevice('${category}',${dev.id})">启动</button>`;
             } else {
               actionBtn = `<button class="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600" onclick="stopDevice('${category}',${dev.id})">停止</button>`;
             }
+            
+            // 转义特殊字符的函数
+            function escapeHtml(unsafe) {
+              return unsafe
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+            }
+            
+            // 转义JSON字符串中的引号，以便在HTML属性中使用
+            function escapeJsonForHtml(jsonString) {
+              return jsonString
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+            }
+            
             deviceCards.innerHTML += `
               <div class="p-4 bg-gray-50 rounded shadow flex flex-col gap-2 border border-gray-200">
                 <div class="font-bold text-blue-500">${category.toUpperCase()}</div>
                 <div>类型: <span class="font-mono">${dev.type}</span></div>
-                <div>配置: <span class="text-xs">${JSON.stringify(dev.config)}</span></div>
+                <div>配置: <span class="text-xs">${escapeHtml(JSON.stringify(dev.config))}</span></div>
+                <!-- 连接状态单独一行显示，按照"连接状态：xxx"格式 -->
+                <div class="flex items-center">
+                  <span>连接状态：</span>
+                  <span class="px-2 py-1 rounded text-white ${statusBgColor} rounded-full">${statusText}</span>
+                </div>
                 <div class="flex items-center gap-2 mt-2">
-                  <span class="px-2 py-1 rounded text-white bg-${statusColor}-500">${statusText}</span>
-                  <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick="showConfigModal('${category}',${dev.id}, '${dev.type}', ${JSON.stringify(dev.config)}, '${dev.name}', '${dev.describe}')">配置</button>
+                  <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick="showConfigModal('${category}',${dev.id},'${dev.type}','${escapeJsonForHtml(JSON.stringify(dev.config))}','${escapeHtml(dev.name)}','${escapeHtml(dev.describe)}')">配置</button>
                   ${actionBtn}
                   <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700" onclick="deleteDevice('${category}',${dev.id})">删除</button>
                 </div>
@@ -287,14 +320,17 @@ document.addEventListener('DOMContentLoaded', () => {
         renderTypeSelect(types);
         // 默认渲染第一个type的config字段
         const firstType = Object.keys(types)[0];
-        renderConfigFields(types[firstType] || []);
+        // 获取配置字段的键名（而不是整个对象）
+        const configFields = Object.keys(types[firstType] || {});
+        renderConfigFields(configFields);
       });
   };
 
   // 监听type变化
   addDeviceForm.addEventListener('change', function (e) {
     if (e.target.name === 'type') {
-      const fields = adaptedTypes[e.target.value] || [];
+      // 获取配置字段的键名（而不是整个对象）
+      const fields = Object.keys(adaptedTypes[e.target.value] || {});
       renderConfigFields(fields);
     }
   });
@@ -317,23 +353,43 @@ document.addEventListener('DOMContentLoaded', () => {
     const name = form.get('name');
     const describe = form.get('describe');
     let config = {};
-    (adaptedTypes[type] || []).forEach(field => {
+    // 修复：adaptedTypes[type] 是一个对象，不是数组
+    const configFields = adaptedTypes[type] || {};
+    Object.keys(configFields).forEach(field => {
       config[field] = form.get(field);
     });
     fetch(`/api/devices/${category}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, describe, type, config })
-    }).then(() => {
-      addDeviceModal.classList.add('hidden');
-      renderDeviceCards();
+    }).then(response => {
+      if (response.ok) {
+        addDeviceModal.classList.add('hidden');
+        renderDeviceCards();
+      } else {
+        console.error('添加设备失败:', response.status);
+        alert('添加设备失败，请检查控制台错误信息');
+      }
+    }).catch(error => {
+      console.error('添加设备出错:', error);
+      alert('添加设备出错，请检查控制台错误信息');
     });
   };
 
   // 设备操作API
   // 配置弹窗
   let configModal = null;
-  window.showConfigModal = function (category, id, type, config, name, describe) {
+  window.showConfigModal = function (category, id, type, configStr, name, describe) {
+    // 解析传递过来的JSON字符串
+    let config = {};
+    try {
+      config = JSON.parse(configStr);
+    } catch (e) {
+      console.error('解析配置失败:', e);
+      alert('配置解析失败');
+      return;
+    }
+    
     if (configModal) configModal.remove();
     configModal = document.createElement('div');
     configModal.className = 'fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50';
@@ -366,9 +422,17 @@ document.addEventListener('DOMContentLoaded', () => {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newName, describe: newDescribe, config: newConfig })
-      }).then(() => {
-        configModal.remove();
-        renderDeviceCards();
+      }).then(response => {
+        if (response.ok) {
+          configModal.remove();
+          renderDeviceCards();
+        } else {
+          console.error('更新设备配置失败:', response.status);
+          alert('更新设备配置失败，请检查控制台错误信息');
+        }
+      }).catch(error => {
+        console.error('更新设备配置出错:', error);
+        alert('更新设备配置出错，请检查控制台错误信息');
       });
     };
   };

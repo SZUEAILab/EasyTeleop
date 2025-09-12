@@ -5,15 +5,25 @@ import pyrealsense2 as rs
 import threading
 import time
 # from pyorbbecsdk import *
-from .BaseCamera import BaseCamera
+from ..BaseDevice import BaseDevice
 
 
-class RealSenseCamera(BaseCamera):
+class RealSenseCamera(BaseDevice):
     """RealSense摄像头设备实现"""
     
-    def __init__(self, config: str, poll_interval=0.01):
+    # 定义需要的配置字段为静态字段
+    need_config = {
+        "camera_type": "摄像头类型",
+        "camera_position": "摄像头位置",
+        "camera_serial": "摄像头序列号"
+    }
+    
+    def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.poll_interval = poll_interval  # 轮询间隔（秒）
+        self.camera_type = None
+        self.camera_position = None
+        self.camera_serial = None
+        self.poll_interval = 0.01  # 轮询间隔（秒）
         self.polling_thread = None
         self.polling_running = False
         self.pipeline = None    # 存储pipeline对象
@@ -22,11 +32,65 @@ class RealSenseCamera(BaseCamera):
         self._events = {
              "frame": self._default_callback,
         }
+        
+        # 如果提供了配置，则设置配置
+        if config:
+            self.set_config(config)
+            
+    def set_config(self, config: Dict[str, Any]) -> bool:
+        """
+        设置设备配置，验证配置是否符合need_config要求
+        :param config: 配置字典
+        :return: 是否设置成功
+        """
+        # 检查必需的配置字段
+        for key in self.need_config:
+            if key not in config:
+                raise ValueError(f"缺少必需的配置字段: {key}")
+        
+        self.config = config
+        self.camera_type = config["camera_type"]
+        self.camera_position = config["camera_position"]
+        self.camera_serial = config["camera_serial"]
+        
+        return True
 
     def start(self):
         self.connect()
         print("Camera connect")
         self.start_polling()
+
+    def connect(self) -> bool:
+        """连接RealSense摄像头"""
+        try:
+            self.pipeline = rs.pipeline()
+            self.rsconfig.enable_device(self.camera_serial)
+            self.rsconfig.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+            self.rsconfig.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            profile = self.pipeline.start(self.rsconfig)
+            device = profile.get_device()
+            device.hardware_reset()
+            self.set_conn_status(1)
+            print(f"connected successfully")
+            return True
+        except Exception as e:
+            self.set_conn_status(2)
+            print(f"connect failed: {str(e)}")
+            return False
+
+    def disconnect(self) -> bool:
+        """断开RealSense摄像头连接"""
+        try:
+            if self.pipeline:
+                self.pipeline.stop()
+                self.pipeline = None
+            self.set_conn_status(2)
+            print(f"disconnected successfully")
+            return True
+        except Exception as e:
+            self.set_conn_status(2)
+            print(f"disconnect failed: {str(e)}")
+            return False
 
     def start_polling(self):
         """启动状态轮询线程"""
@@ -53,43 +117,11 @@ class RealSenseCamera(BaseCamera):
                 break
             
             time.sleep(self.poll_interval)
-    
-    def connect(self) -> bool:
-        """连接RealSense摄像头"""
-        try:
-            self.pipeline = rs.pipeline()
-            self.rsconfig.enable_device(self.config["serial"])
-            self.rsconfig.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-            self.rsconfig.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-            profile = self.pipeline.start(self.rsconfig)
-            device = profile.get_device()
-            device.hardware_reset()
-            self.set_conn_status(1)
-            print(f"connected successfully")
-            return True
-        except Exception as e:
-            self.set_conn_status(2)
-            print(f"connect failed: {str(e)}")
-            return False
-    
-    def disconnect(self) -> bool:
-        """断开RealSense摄像头连接"""
-        try:
-            if self.pipeline:
-                self.pipeline.stop()
-                self.pipeline = None
-            self.set_conn_status(2)
-            print(f"disconnected successfully")
-            return True
-        except Exception as e:
-            self.set_conn_status(2)
-            print(f"disconnect failed: {str(e)}")
-            return False
-    
+
     def is_connected(self) -> bool:
         """检查RealSense摄像头是否连接"""
         return self.pipeline is not None
-    
+
     def get_device_info(self) -> Dict[str, Any]:
         """获取RealSense摄像头信息"""
         if self.is_connected():
@@ -99,7 +131,7 @@ class RealSenseCamera(BaseCamera):
                 "position": self.camera_position
             }
         return None
-    
+
     def get_frames(self) -> Tuple[np.ndarray, np.ndarray]:
         """获取RealSense摄像头帧(RGB, Depth)"""
         if not self.is_connected():
@@ -114,7 +146,13 @@ class RealSenseCamera(BaseCamera):
             return None, None
         return np.asanyarray(color_frame.get_data()), np.asanyarray(depth_frame.get_data())
 
+    def stop(self):
+        """停止设备"""
+        self.stop_polling()
+        self.disconnect()
 
+    def __del__(self):
+        self.stop()
 
 # if __name__ == "__main__":
 #     CAMERA_SERIALS = {

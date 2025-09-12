@@ -13,10 +13,71 @@ from Device.Camera.RealSenseCamera import RealSenseCamera
 from Device.Robot.RealMan import RM_controller
 from Device.VR.VRSocket import VRSocket
 
-from TeleopGroup import TeleopGroup
+from TeleopMiddleware import TeleopMiddleware
 
 # 遥操作组管理
 TELEOP_GROUPS = {}
+
+# 全局设备池变量
+# 注意：这个变量需要在FastAPI应用启动时初始化，而不是在if __name__ == "__main__"中初始化
+# 原因如下：
+# 1. 当使用uvicorn.run()运行FastAPI应用时，实际会启动一个独立的服务器进程
+# 2. 在这个进程中，只有被导入的模块会被执行，而if __name__ == "__main__"块中的代码不会被执行
+# 3. @app.on_event("startup")装饰器确保在FastAPI应用实际启动并准备处理请求之前执行初始化代码
+# 4. 这样可以确保在所有API路由中都能访问到正确初始化的device_pool
+device_pool = {}
+
+
+class TeleopGroup:
+    def __init__(self, group_id, config):
+        self.id = group_id
+        self.config = config
+        self.teleop = None
+        self.running = False
+
+    def start(self, device_pool):
+        print("TeleopGroup.start中设备池内容:", {k: list(v.keys()) for k, v in device_pool.items()})
+        # 按照配置引用device_pool
+        self.teleop = TeleopMiddleware()
+        print(self.config)
+        # 左手臂
+        left_id = self.config.get('left_arm')
+        if isinstance(left_id, str) and left_id.isdigit():
+            left_id = int(left_id)
+        self.left_arm = device_pool['robot'].get(left_id)
+        if self.left_arm:
+            self.teleop.on("leftGripDown", self.left_arm.start_control)
+            self.teleop.on("leftGripUp", self.left_arm.stop_control)
+        # 右手臂
+        right_id = (self.config.get('right_arm'))
+        if isinstance(right_id, str) and right_id.isdigit():
+            right_id = int(right_id)
+        self.right_arm = device_pool['robot'].get(right_id)
+        if self.right_arm:
+            self.teleop.on("rightGripDown", self.right_arm.start_control)
+            self.teleop.on("rightGripUp", self.right_arm.stop_control)
+        # VR头显
+        vr_id = (self.config.get('vr'))
+        if isinstance(vr_id, str) and vr_id.isdigit():
+            vr_id = int(vr_id)
+        self.vr = device_pool['vr'].get(vr_id)
+        if self.vr:
+            self.vr.on("message",self.teleop.handle_socket_data)
+        # 摄像头（可选）
+        # 可按需扩展摄像头相关逻辑
+        self.running = True
+
+    def stop(self):
+        # 仅停止teleop逻辑，不操作设备
+        if self.vr:
+            self.vr.off("message")
+        if self.left_arm:
+            self.teleop.off("leftGripDown")
+            self.teleop.off("leftGripUp")
+        if self.right_arm:
+            self.teleop.off("rightGripDown")
+            self.teleop.off("rightGripUp")
+        self.running = False
 
 
 
@@ -91,6 +152,13 @@ class MessageResponse(BaseModel):
 
 app = FastAPI()
 
+# 在应用启动时初始化设备池
+@app.on_event("startup")
+async def startup_event():
+    init_device_tables(DB_PATH)
+    init_device_pool()
+    print("FastAPI应用启动，设备池内容:", {k: list(v.keys()) for k, v in device_pool.items()})
+
 DB_PATH = "teleop_data.db"
 
 # 
@@ -105,9 +173,6 @@ DEVICE_CONFIG = {
         "RealSense": RealSenseCamera,
         }     
 }
-
-device_pool = {}
-
 
 # Initialize device pool based on database records
 def init_device_pool():
@@ -170,12 +235,18 @@ def get_adapted_types(category: str):
     if category not in DEVICE_CONFIG:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类别错误")
     result = {}
-    for key, value in DEVICE_CONFIG[category].items():
-        if hasattr(value, 'required_config_fields'):
-            result[key] = value.required_config_fields
-        else:
+    for key, cls in DEVICE_CONFIG[category].items():
+        # 确保是类且具有 get_need_config 方法
+        if not hasattr(cls, 'get_need_config'):
             result[key] = []
-    return DEVICE_CONFIG[category]
+            continue
+        try:
+            config_fields = cls.get_need_config()
+            result[key] = config_fields
+        except Exception as e:
+            print(f"[Error] 获取设备类型 {category}/{key} 的配置字段失败: {e}")
+            result[key] = []
+    return result
 
 # 新增设备（卡片添加）
 @app.post("/api/devices/{category}", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
@@ -188,7 +259,13 @@ def add_device(category: str, device: DeviceCreate):
     if category not in DEVICE_CONFIG or type_ not in DEVICE_CONFIG[category]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"类型 {type_} 未适配于 {category}")
     # 检查config字段
-    required_fields = DEVICE_CONFIG[category][type_]
+    device_class = DEVICE_CONFIG[category][type_]
+    # 使用类方法获取所需配置字段
+    if hasattr(device_class, 'get_need_config'):
+        required_fields = device_class.get_need_config()
+    else:
+        required_fields = {}
+        
     for field in required_fields:
         if field not in config:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"缺少配置字段: {field}")
@@ -230,7 +307,13 @@ def update_device_config(category: str, id: int, device_update: DeviceUpdate):
         conn.close()
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"类型 {type_} 未适配于 {category}")
     # 检查config字段
-    required_fields = DEVICE_CONFIG[category][type_]
+    device_class = DEVICE_CONFIG[category][type_]
+    # 使用类方法获取所需配置字段
+    if hasattr(device_class, 'get_need_config'):
+        required_fields = device_class.get_need_config()
+    else:
+        required_fields = {}
+        
     for field in required_fields:
         if field not in config:
             conn.close()
@@ -369,7 +452,7 @@ def start_teleop_group(group_id: str):
     group = TELEOP_GROUPS.get(group_id)
     if not group:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
-    group.start()
+    group.start(device_pool)
     return MessageResponse(message="遥操作已启动")
 
 # 停止遥操作组
@@ -386,15 +469,11 @@ def stop_teleop_group(group_id: str):
 app.mount("/", StaticFiles(directory="static"), name="index")
 
 if __name__ == "__main__":
-    db_path = os.path.join(os.path.dirname(__file__), "teleop_data.db")
-    init_device_tables(db_path)
-    # Initialize device pool with existing devices
-    init_device_pool()
     # 配置Uvicorn参数
     uvicorn.run(
         app="server:app",  # 指明FastAPI应用的位置（模块名:应用实例名）
         host="0.0.0.0",  # 允许外部访问
         port=8000,       # 端口号
-        reload=True,     # 开发模式下启用自动重载（生产环境建议关闭）
+        reload=False,     # 开发模式下启用自动重载（生产环境建议关闭）
         workers=1        # 工作进程数（单进程即可，多进程可能影响WebSocket）
     )

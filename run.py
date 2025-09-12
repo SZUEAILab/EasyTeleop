@@ -2,7 +2,7 @@ from TeleopMiddleware import TeleopMiddleware
 from Device.VR.VRSocket import VRSocket
 from Device.Robot.RealMan import RM_controller
 from DataCollect import DataCollect
-from Camera.RealSenseCamera import RealSenseCamera
+from Device.Camera.RealSenseCamera import RealSenseCamera
 import cv2
 
 if __name__ == '__main__':

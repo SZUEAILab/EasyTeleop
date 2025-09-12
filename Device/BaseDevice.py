@@ -6,11 +6,12 @@ from abc import ABC, abstractmethod
 class BaseDevice(ABC):
     """设备接口抽象类，定义设备的基本操作和状态管理"""
     
+    # 需要的配置字段（由子类定义，格式: {字段名: 类型/描述}）
+    need_config: Dict[str, Any] = {}
+    
     def __init__(self, config: Dict[str, Any] = None):
         # 配置信息
         self.config = config or {}
-        # 需要的配置字段（由子类定义，格式: {字段名: 类型/描述}）
-        self.need_config: Dict[str, Any] = {}
         # 回调函数字典
         self._events: Dict[str, Callable] = {}
         # 连接状态: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接,需要实现重连机制(红色)
@@ -75,12 +76,14 @@ class BaseDevice(ABC):
         if status in (0, 1, 2) and status != self._conn_status:
             self._conn_status = status
     
-    def get_need_config(self) -> Dict[str, Any]:
+    @classmethod
+    def get_need_config(cls) -> Dict[str, Any]:
         """
-        获取当前设备配置
-        :return: 配置字典
+        获取当前设备所需配置字段
+        :return: 配置字段字典
         """
-        return self.need_config
+        return cls.need_config
+        
     @abstractmethod
     def set_config(self, config: Dict[str, Any]) -> bool:
         """

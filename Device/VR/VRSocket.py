@@ -5,14 +5,14 @@ from ..BaseDevice import BaseDevice
 
 
 class VRSocket(BaseDevice):
+    # 定义需要的配置字段为静态字段
+    need_config = {
+        "ip": "服务器IP地址",
+        "port": "服务器端口号"
+    }
+    
     def __init__(self, config=None):
         super().__init__(config)
-        
-        # 定义需要的配置字段
-        self.need_config = {
-            "ip": "服务器IP地址",
-            "port": "服务器端口号"
-        }
         
         # 初始化 socket 连接相关变量
         self.ip = None
