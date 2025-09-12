@@ -1,5 +1,5 @@
 import yaml
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, status
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -44,6 +44,50 @@ def init_device_tables(db_path):
 def get_db_conn():
     db_path = os.path.join(os.path.dirname(__file__), "teleop_data.db")
     return sqlite3.connect(db_path)
+
+# Pydantic模型定义
+class DeviceBase(BaseModel):
+    name: str
+    describe: str
+    type: str
+    config: dict
+
+class DeviceCreate(DeviceBase):
+    pass
+
+class DeviceUpdate(BaseModel):
+    config: dict
+
+class Device(DeviceBase):
+    id: int
+
+    class Config:
+        orm_mode = True
+
+class DeviceStatusResponse(BaseModel):
+    conn_status: int
+
+class DeviceCategoryResponse(BaseModel):
+    categories: List[str]
+
+class TeleopGroupBase(BaseModel):
+    config: dict
+
+class TeleopGroupCreate(TeleopGroupBase):
+    pass
+
+class TeleopGroupUpdate(TeleopGroupBase):
+    pass
+
+class TeleopGroupResponse(TeleopGroupBase):
+    id: str
+    running: bool
+
+    class Config:
+        orm_mode = True
+
+class MessageResponse(BaseModel):
+    message: str
 
 app = FastAPI()
 
@@ -92,7 +136,7 @@ def init_device_pool():
 
 
 # 1. 获取所有设备 type+config
-@app.get("/devices")
+@app.get("/api/devices", response_model=Dict[str, List[Device]])
 def get_all_devices():
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -107,7 +151,7 @@ def get_all_devices():
     conn.close()
     return result
 
-@app.get("/devices/{category}")
+@app.get("/api/devices/{category}", response_model=List[Device])
 def get_all_devices_category(category:str):
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -121,10 +165,10 @@ def get_all_devices_category(category:str):
 
 
 # 获取适配类型及config字段
-@app.get("/device/{category}/adapted_types")
+@app.get("/api/device-types/{category}")
 def get_adapted_types(category: str):
     if category not in DEVICE_CONFIG:
-        raise HTTPException(400, "类别错误")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类别错误")
     result = {}
     for key, value in DEVICE_CONFIG[category].items():
         if hasattr(value, 'required_config_fields'):
@@ -134,46 +178,44 @@ def get_adapted_types(category: str):
     return DEVICE_CONFIG[category]
 
 # 新增设备（卡片添加）
-@app.post("/device/{category}/add")
-def add_device(category: str, body: dict = Body(...)):
-    type_ = body.get("type")
-    config = body.get("config")
-    if not type_ or not config:
-        raise HTTPException(400, "缺少 type 或 config")
+@app.post("/api/devices/{category}", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
+def add_device(category: str, device: DeviceCreate):
+    type_ = device.type
+    config = device.config
+    name = device.name
+    describe = device.describe
     # 只允许选择已适配类型
     if category not in DEVICE_CONFIG or type_ not in DEVICE_CONFIG[category]:
-        raise HTTPException(400, f"类型 {type_} 未适配于 {category}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"类型 {type_} 未适配于 {category}")
     # 检查config字段
     required_fields = DEVICE_CONFIG[category][type_]
     for field in required_fields:
         if field not in config:
-            raise HTTPException(400, f"缺少配置字段: {field}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"缺少配置字段: {field}")
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO devices (category, type, config) VALUES (?, ?, ?)", (category, type_, json.dumps(config)))
+    cursor.execute("INSERT INTO devices (name, describe, category, type, config) VALUES (?, ?, ?, ?, ?)", (name, describe, category, type_, json.dumps(config)))
     conn.commit()
     conn.close()
-    return {"msg": "设备已添加"}
+    return MessageResponse(message="设备已添加")
 
 # 获取单个设备详情
-@app.get("/device/{category}/{id}")
+@app.get("/api/devices/{category}/{id}", response_model=Device)
 def get_device(category: str, id: int):
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, type, config FROM devices WHERE id=?", (id,))
+    cursor.execute("SELECT id, name, describe, type, config FROM devices WHERE id=?", (id,))
     row = cursor.fetchone()
     conn.close()
     if not row:
-        raise HTTPException(404, "设备不存在")
-    return {"id": row[0], "type": row[1], "config": json.loads(row[2])}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备不存在")
+    return Device(id=row[0], name=row[1], describe=row[2], type=row[3], config=json.loads(row[4]))
 
 
 # 2. 修改某个设备 config
-@app.put("/device/{category}/{id}/config")
-def update_device_config(category: str, id: int, body: dict = Body(...)):
-    config = body.get("config")
-    if not config:
-        raise HTTPException(400, "缺少 config")
+@app.put("/api/devices/{category}/{id}", response_model=MessageResponse)
+def update_device_config(category: str, id: int, device_update: DeviceUpdate):
+    config = device_update.config
     # 获取设备类型
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -181,18 +223,18 @@ def update_device_config(category: str, id: int, body: dict = Body(...)):
     row = cursor.fetchone()
     if not row:
         conn.close()
-        raise HTTPException(404, "设备不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备不存在")
     type_ = row[0]
     # 只允许选择已适配类型
     if category not in DEVICE_CONFIG or type_ not in DEVICE_CONFIG[category]:
         conn.close()
-        raise HTTPException(400, f"类型 {type_} 未适配于 {category}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"类型 {type_} 未适配于 {category}")
     # 检查config字段
     required_fields = DEVICE_CONFIG[category][type_]
     for field in required_fields:
         if field not in config:
             conn.close()
-            raise HTTPException(400, f"缺少配置字段: {field}")
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"缺少配置字段: {field}")
     cursor.execute("UPDATE devices SET config=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(config), id))
     conn.commit()
     conn.close()
@@ -201,10 +243,10 @@ def update_device_config(category: str, id: int, body: dict = Body(...)):
         device = device_pool[category][id]
         if hasattr(device, 'update_config'):
             device.update_config(config)
-    return {"msg": "配置已更新"}
+    return MessageResponse(message="配置已更新")
 
 # 3. 启动设备对象
-@app.post("/device/{category}/{id}/start")
+@app.post("/api/devices/{category}/{id}/start", response_model=MessageResponse)
 def start_device(category: str, id: int):
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -212,7 +254,7 @@ def start_device(category: str, id: int):
     row = cursor.fetchone()
     conn.close()
     if not row:
-        raise HTTPException(404, "设备不存在或未启用")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备不存在或未启用")
     # 初始化对象,about bussiness logic
     type_, config = row[0], json.loads(row[1])
     
@@ -223,23 +265,23 @@ def start_device(category: str, id: int):
     if category not in device_pool:
         device_pool[category] = {}
     device_pool[category][id] = obj
-    return {"msg": "设备已启动"}
+    return MessageResponse(message="设备已启动")
 
 # 4. 停止并删除设备对象
-@app.post("/device/{category}/{id}/stop")
+@app.post("/api/devices/{category}/{id}/stop", response_model=MessageResponse)
 def stop_device(category: str, id: int):
     pool = device_pool.get(category, {})
     if id not in pool:
-        raise HTTPException(404, "设备未启动")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备未启动")
     obj = pool[id]
     if hasattr(obj, 'stop'):
         obj.stop()
     del pool[id]
-    return {"msg": "设备已停止并删除"}
+    return MessageResponse(message="设备已停止并删除")
 
 
 # 5. 删除设备（彻底从数据库移除）
-@app.delete("/device/{category}/{id}/delete")
+@app.delete("/api/devices/{category}/{id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_device(category: str, id: int):
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -247,17 +289,17 @@ def delete_device(category: str, id: int):
     row = cursor.fetchone()
     if not row:
         conn.close()
-        raise HTTPException(404, "设备不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备不存在")
     cursor.execute("DELETE FROM devices WHERE id=?", (id,))
     conn.commit()
     conn.close()
     # 同时从设备池移除对象（如果有）
     if category in device_pool and id in device_pool[category]:
         del device_pool[category][id]
-    return {"msg": "设备已彻底删除"}
+    return None
 
 # 获取设备连接状态
-@app.get("/device/{category}/{id}/conn_status")
+@app.get("/api/devices/{category}/{id}/status", response_model=DeviceStatusResponse)
 def get_device_conn_status(category: str, id: int):
     pool = device_pool.get(category, {})
     if id not in pool:
@@ -272,68 +314,72 @@ def get_device_conn_status(category: str, id: int):
         else:
             status = 0
     print(f"[ConnStatus] category={category}, id={id}, status={status}")
-    return {"conn_status": status}
+    return DeviceStatusResponse(conn_status=status)
 
 
+# 获取所有设备分类
+@app.get("/api/device-categories", response_model=DeviceCategoryResponse)
+def get_device_categories():
+    return DeviceCategoryResponse(categories=list(DEVICE_CONFIG.keys()))
 
 # 获取所有遥操作组列表
-@app.get("/teleop/list")
+@app.get("/api/teleop-groups", response_model=List[TeleopGroupResponse])
 def list_teleop_groups():
     return [
-        {"id": g.id, "config": g.config, "running": g.running}
+        TeleopGroupResponse(id=g.id, config=g.config, running=g.running)
         for g in TELEOP_GROUPS.values()
     ]
 
 # 创建遥操作组
-@app.post("/teleop/{group_id}")
-def create_teleop_group(group_id: str, body: dict = Body(...)):
+@app.post("/api/teleop-groups/{group_id}", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
+def create_teleop_group(group_id: str, teleop_group: TeleopGroupCreate):
     if group_id in TELEOP_GROUPS:
-        raise HTTPException(400, "遥操作组已存在")
-    TELEOP_GROUPS[group_id] = TeleopGroup(group_id, body)
-    return {"msg": "遥操作组已创建"}
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="遥操作组已存在")
+    TELEOP_GROUPS[group_id] = TeleopGroup(group_id, teleop_group.config)
+    return MessageResponse(message="遥操作组已创建")
 
 # 更新遥操作组
-@app.put("/teleop/{group_id}")
-def update_teleop_group(group_id: str, body: dict = Body(...)):
+@app.put("/api/teleop-groups/{group_id}", response_model=MessageResponse)
+def update_teleop_group(group_id: str, teleop_group: TeleopGroupUpdate):
     if group_id not in TELEOP_GROUPS:
-        raise HTTPException(404, "遥操作组不存在")
-    TELEOP_GROUPS[group_id].config = body
-    return {"msg": "遥操作组已更新"}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
+    TELEOP_GROUPS[group_id].config = teleop_group.config
+    return MessageResponse(message="遥操作组已更新")
 
 # 删除遥操作组
-@app.delete("/teleop/{group_id}")
+@app.delete("/api/teleop-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_teleop_group(group_id: str):
     if group_id not in TELEOP_GROUPS:
-        raise HTTPException(404, "遥操作组不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
     del TELEOP_GROUPS[group_id]
-    return {"msg": "遥操作组已删除"}
+    return None
 
 # 获取遥操作组配置
-@app.get("/teleop/{group_id}")
+@app.get("/api/teleop-groups/{group_id}", response_model=TeleopGroupResponse)
 def get_teleop_group(group_id: str):
     group = TELEOP_GROUPS.get(group_id)
     if not group:
-        raise HTTPException(404, "遥操作组不存在")
-    return {"id": group.id, "config": group.config, "running": group.running}
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
+    return TeleopGroupResponse(id=group.id, config=group.config, running=group.running)
 
 # 启动遥操作组
-@app.post("/teleop/{group_id}/start")
+@app.post("/api/teleop-groups/{group_id}/start", response_model=MessageResponse)
 # about bussiness logic
 def start_teleop_group(group_id: str):
     group = TELEOP_GROUPS.get(group_id)
     if not group:
-        raise HTTPException(404, "遥操作组不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
     group.start()
-    return {"msg": "遥操作已启动"}
+    return MessageResponse(message="遥操作已启动")
 
 # 停止遥操作组
-@app.post("/teleop/{group_id}/stop")
+@app.post("/api/teleop-groups/{group_id}/stop", response_model=MessageResponse)
 def stop_teleop_group(group_id: str):
     group = TELEOP_GROUPS.get(group_id)
     if not group:
-        raise HTTPException(404, "遥操作组不存在")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
     group.stop()
-    return {"msg": "遥操作已停止"}
+    return MessageResponse(message="遥操作已停止")
 
 
 
@@ -352,6 +398,3 @@ if __name__ == "__main__":
         reload=True,     # 开发模式下启用自动重载（生产环境建议关闭）
         workers=1        # 工作进程数（单进程即可，多进程可能影响WebSocket）
     )
-    
-
-# 启动命令: uvicorn server:app --reload
