@@ -127,20 +127,18 @@ def get_table_name(category):
 # 辅助：根据类别和 type 初始化对象
 def create_device_instance(category, type_, config):
     if category == "arm":
-        return RM_controller(config)
+        if type_ == "RealMan":
+            return RM_controller(config)
     elif category == "camera":
         # RealSenseCamera 构造参数兼容 config
         if type_ == "RealSense":
             # 兼容 config 可能为 {"camera_type", "camera_position", "camera_serial"}
-            return RealSenseCamera(
-                config.get("camera_type", "RealSense"),
-                config.get("camera_position", "default"),
-                config.get("camera_serial", "")
-            )
+            return RealSenseCamera()
         else:
             return None
     elif category == "vr":
-        return VRSocket(config)
+        if type_ == "Quest":
+            return VRSocket(config)
     else:
         raise HTTPException(400, "类别错误")
 
@@ -162,8 +160,8 @@ ADAPTED_TYPES = {
         "TestArm": ["ip", "port", "model"]
     },
     "camera": {
-        "RealSense": ["camera_type", "camera_position", "camera_serial"],
-        "TestCam": ["camera_type", "camera_position"]
+        "RealSense": ["camera_serial"],
+        "TestCam": ["camera_serial"]
     },
     "vr": {
         "Quest": ["ip", "port"],
@@ -193,6 +191,18 @@ def get_all_devices():
         rows = cursor.fetchall()
         for r in rows:
             result[key].append({"id": r[0], "type": r[1], "config": json.loads(r[2])})
+    conn.close()
+    return result
+
+@app.get("/devices/{category}")
+def get_all_devices_category(category:str):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    result = []
+    cursor.execute(f"SELECT id, type, config FROM {category} WHERE is_active=1")
+    rows = cursor.fetchall()
+    for r in rows:
+        result.append({"id": r[0], "type": r[1], "config": json.loads(r[2])})
     conn.close()
     return result
 

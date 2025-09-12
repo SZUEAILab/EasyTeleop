@@ -7,13 +7,7 @@ import time
 # from pyorbbecsdk import *
 from .BaseCamera import BaseCamera
 
-CAMERA_SERIALS = {
-    "RealSense": {
-        'head': '153122070447',  
-        'left_wrist': '427622270438',   
-        'right_wrist': '427622270277',   
-    }
-}
+
 class RealSenseCamera(BaseCamera):
     """RealSense摄像头设备实现"""
     
@@ -24,8 +18,14 @@ class RealSenseCamera(BaseCamera):
         self.polling_running = False
         self.pipeline = None    # 存储pipeline对象
         self.rsconfig = rs.config()  
+        
+        self._events = {
+             "frame": self._default_callback,
+        }
 
     def start(self):
+        self.connect()
+        print("Camera connect")
         self.start_polling()
 
     def start_polling(self):
@@ -45,17 +45,8 @@ class RealSenseCamera(BaseCamera):
     def _poll_state(self):
         while self.polling_running:
             try:
-                succ, arm_state = self.arm_controller.rm_get_current_arm_state()
-                if not succ:
-                    with self.state_lock:
-                        self.current_state = arm_state["pose"]
-                        self.emit("state",self.current_state)#调用回调函数
-            
-                # 获取夹爪状态
-                succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
-                if not succ_gripper:
-                    with self.state_lock:
-                        self.current_gripper_state = gripper_state
+                color_frame, depth_frame = self.get_frames()
+                self.emit("frame",color_frame)
                 
             except Exception as e:
                 print(f"Error polling robot state: {str(e)}")
@@ -63,7 +54,7 @@ class RealSenseCamera(BaseCamera):
             
             time.sleep(self.poll_interval)
     
-    def connect(self, **kwargs) -> bool:
+    def connect(self) -> bool:
         """连接RealSense摄像头"""
         try:
             self.pipeline = rs.pipeline()
@@ -125,30 +116,48 @@ class RealSenseCamera(BaseCamera):
 
 
 
-if __name__ == "__main__":
-    camera1 = RealSenseCamera({"serial":"153122070447"})
-    camera2 = RealSenseCamera({"serial":"427622270438"})
-    camera1.connect()
-    camera2.connect()
-    for i in range(50):
+# if __name__ == "__main__":
+#     CAMERA_SERIALS = {
+#     "RealSense": {
+#         'head': '153122070447',  
+#         'left_wrist': '427622270438',   
+#         'right_wrist': '427622270277',   
+#     }
+# }
+#     camera1 = RealSenseCamera({"serial":"153122070447"})
+#     camera1.connect()
+#     while 1:
             
-            color_frame, depth_frame = camera1.get_frames()
-            depth_frame = cv2.applyColorMap(cv2.convertScaleAbs(depth_frame, alpha=0.03), cv2.COLORMAP_JET)
-            color_frame2, depth_frame2 = camera2.get_frames() # depth_image = cv.applyColorMap(cv.convertScaleAbs(depth_image, alpha=0.03), cv.COLORMAP_JET)
-            depth_frame2 = cv2.applyColorMap(cv2.convertScaleAbs(depth_frame2, alpha=0.03), cv2.COLORMAP_JET)
-            
-            if color_frame is not None and depth_frame is not None:
-                try:
-                    cv2.imshow("Color", color_frame)
-                    cv2.imshow("Depth", depth_frame)
-                    cv2.waitKey(500)
-                except cv2.error as e:
-                    print(f"Display error (but frames are OK): {e}")
-            if color_frame2 is not None and depth_frame2 is not None:
-                try:
-                    cv2.imshow("Color2", color_frame2)
-                    cv2.imshow("Depth2", depth_frame2)
-                    cv2.waitKey(500)
-                except cv2.error as e:
-                    print(f"Display error (but frames are OK): {e}")
+#         color_frame, depth_frame = camera1.get_frames()
+#         depth_frame = cv2.applyColorMap(cv2.convertScaleAbs(depth_frame, alpha=0.03), cv2.COLORMAP_JET)
         
+#         if color_frame is not None and depth_frame is not None:
+#             try:
+#                 cv2.imshow("Color", color_frame)
+#                 cv2.imshow("Depth", depth_frame)
+#                 cv2.waitKey(1)
+#             except cv2.error as e:
+#                 print(f"Display error (but frames are OK): {e}")
+if __name__ == "__main__":
+    import open3d as o3d
+    CAMERA_SERIALS = {
+        "RealSense": {
+            'head': '153122070447',
+            'left_wrist': '427622270438',
+            'right_wrist': '427622270277',
+        }
+    }
+    camera1 = RealSenseCamera({"serial": "153122070447"})
+    if camera1.connect():
+        pipeline = camera1.pipeline
+        pc = rs.pointcloud()
+        frames = pipeline.wait_for_frames()
+        depth_frame = frames.get_depth_frame()
+        color_frame = frames.get_color_frame()
+        points = pc.calculate(depth_frame)
+        vtx = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
+        # 构建Open3D点云
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(vtx)
+        o3d.visualization.draw_geometries([pcd], window_name='RealSense PointCloud')
+        camera1.disconnect()

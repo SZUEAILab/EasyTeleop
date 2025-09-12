@@ -7,23 +7,14 @@ import cv2
 
 if __name__ == '__main__':
     try:
-        camera1 = RealSenseCamera({"serial":"427622270277"})
-        camera1.connect()
-        for i in range(50):
-            
-            color_frame, depth_frame = camera1.get_frames()
-            depth_frame = cv2.applyColorMap(cv2.convertScaleAbs(depth_frame, alpha=0.03), cv2.COLORMAP_JET)
-            
-            if color_frame is not None and depth_frame is not None:
-                try:
-                    cv2.imshow("Color", color_frame)
-                    cv2.imshow("Depth", depth_frame)
-                    cv2.waitKey(500)
-                except cv2.error as e:
-                    print(f"Display error (but frames are OK): {e}")
+        # camera1 = RealSenseCamera({"serial":"153122070447"})
+        # camera1.start()
 
 
         dc = DataCollect()
+        
+        # camera1.on("frame",dc.put_video_frame)
+        
         dc.start()
         
         l_arm = RM_controller({"ip": "192.168.0.18", "port": 8080})

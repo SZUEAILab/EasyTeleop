@@ -10,9 +10,7 @@ class BaseCamera(ABC):
     def __init__(self,config: str):
         # 属性：设备名称，设备位置，序列号
         self.config = config
-        self._events = {
-             "state": self._default_callback,
-        }
+        self._events = {}
         # 连接状态: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接(红色)
         self._conn_status = 0
         
