@@ -1,6 +1,6 @@
 // 获取设备列表（同步）
 async function getDeviceOptions() {
-  const res = await fetch('/devices');
+  const res = await fetch('/api/devices');
   const data = await res.json();
   return data;
 }
@@ -20,37 +20,37 @@ window.showTeleopModal = async function (group = null) {
         <label>左臂:
           <select name="left_arm" class="border rounded px-2 py-1">
             <option value="">无</option>
-            ${devices.arm.map(dev => `<option value="${dev.id}" ${config.left_arm == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.robot || []).map(dev => `<option value="${dev.id}" ${config.left_arm == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
           </select>
         </label>
         <label>右臂:
           <select name="right_arm" class="border rounded px-2 py-1">
             <option value="">无</option>
-            ${devices.arm.map(dev => `<option value="${dev.id}" ${config.right_arm == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.robot || []).map(dev => `<option value="${dev.id}" ${config.right_arm == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
           </select>
         </label>
         <label>头显:
           <select name="vr" class="border rounded px-2 py-1">
             <option value="">无</option>
-            ${devices.vr.map(dev => `<option value="${dev.id}" ${config.vr == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.vr || []).map(dev => `<option value="${dev.id}" ${config.vr == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
           </select>
         </label>
         <label>头部摄像头:
           <select name="head_camera" class="border rounded px-2 py-1">
             <option value="">无</option>
-            ${devices.camera.map(dev => `<option value="${dev.id}" ${config.head_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.head_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
           </select>
         </label>
         <label>左腕摄像头:
           <select name="left_camera" class="border rounded px-2 py-1">
             <option value="">无</option>
-            ${devices.camera.map(dev => `<option value="${dev.id}" ${config.left_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.left_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
           </select>
         </label>
         <label>右腕摄像头:
           <select name="right_camera" class="border rounded px-2 py-1">
             <option value="">无</option>
-            ${devices.camera.map(dev => `<option value="${dev.id}" ${config.right_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.right_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
           </select>
         </label>
         <div class="flex gap-2 justify-end">
@@ -69,20 +69,20 @@ window.showTeleopModal = async function (group = null) {
       config[key] = value || null;
     }
     if (group) {
-      fetch(`/teleop/${group.id}`, {
+      fetch(`/api/teleop-groups/${group.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify({ config })
       }).then(() => {
         teleopModal.remove();
         renderTeleopGroups();
       });
     } else {
       const newId = 'group_' + Date.now();
-      fetch(`/teleop/${newId}`, {
+      fetch(`/api/teleop-groups/${newId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(config)
+        body: JSON.stringify({ config })
       }).then(() => {
         teleopModal.remove();
         renderTeleopGroups();
@@ -98,7 +98,7 @@ async function renderTeleopGroups() {
   // 获取所有遥操作组
   let groups = [];
   try {
-    const res = await fetch('/teleop/list');
+    const res = await fetch('/api/teleop-groups');
     groups = await res.json();
   } catch { }
   container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groups.map(group => `
@@ -133,10 +133,10 @@ document.addEventListener('DOMContentLoaded', () => {
         <div id="add-device-modal" class="fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50 hidden">
           <form id="add-device-form" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md flex flex-col gap-4">
             <h3 class="text-lg font-bold mb-2">添加设备</h3>
+            <input type="text" name="name" placeholder="设备名称" required class="border rounded px-2 py-1">
+            <input type="text" name="describe" placeholder="设备描述" required class="border rounded px-2 py-1">
             <select name="category" class="border rounded px-2 py-1">
-              <option value="vr">VR头显</option>
-              <option value="arm">机械臂</option>
-              <option value="camera">摄像头</option>
+              <!-- 选项将从API动态加载 -->
             </select>
             <input type="text" name="type" placeholder="类型" required class="border rounded px-2 py-1">
             <div class="flex gap-2 justify-end">
@@ -162,19 +162,19 @@ document.addEventListener('DOMContentLoaded', () => {
   // 设备卡片渲染
   const deviceCards = document.getElementById('device-cards');
   function renderDeviceCards() {
-    fetch('/devices')
+    fetch('/api/devices')
       .then(res => res.json())
       .then(data => {
         deviceCards.innerHTML = '';
         const allDevices = [];
-        ['vr', 'arm', 'camera'].forEach(category => {
-          data[category].forEach(dev => {
+        ['vr', 'robot', 'camera'].forEach(category => {
+          (data[category] || []).forEach(dev => {
             allDevices.push({ category, dev });
           });
         });
         // 并发获取所有设备状态
         Promise.all(allDevices.map(({ category, dev }) =>
-          fetch(`/device/${category}/${dev.id}/conn_status`)
+          fetch(`/api/devices/${category}/${dev.id}/status`)
             .then(res => res.json())
             .then(statusData => ({ category, dev, connStatus: statusData.conn_status }))
             .catch(() => ({ category, dev, connStatus: 0 }))
@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div>配置: <span class="text-xs">${JSON.stringify(dev.config)}</span></div>
                 <div class="flex items-center gap-2 mt-2">
                   <span class="px-2 py-1 rounded text-white bg-${statusColor}-500">${statusText}</span>
-                  <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick="showConfigModal('${category}',${dev.id}, '${dev.type}', ${JSON.stringify(dev.config)})">配置</button>
+                  <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick="showConfigModal('${category}',${dev.id}, '${dev.type}', ${JSON.stringify(dev.config)}, '${dev.name}', '${dev.describe}')">配置</button>
                   ${actionBtn}
                   <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700" onclick="deleteDevice('${category}',${dev.id})">删除</button>
                 </div>
@@ -220,6 +220,33 @@ document.addEventListener('DOMContentLoaded', () => {
   // 移除config输入框（配置(JSON)）
   const configInput = addDeviceForm.querySelector('input[name="config"]');
   if (configInput) configInput.remove();
+
+  // 获取设备分类并填充下拉框
+  function loadCategories() {
+    fetch('/api/device-categories')
+      .then(res => res.json())
+      .then(data => {
+        categorySelect.innerHTML = '';
+        data.categories.forEach(category => {
+          const option = document.createElement('option');
+          option.value = category;
+          option.textContent = getCategoryDisplayName(category);
+          categorySelect.appendChild(option);
+        });
+        // 触发类别change事件以加载类型
+        categorySelect.dispatchEvent(new Event('change'));
+      });
+  }
+
+  // 获取分类显示名称
+  function getCategoryDisplayName(category) {
+    const displayNameMap = {
+      'vr': 'VR头显',
+      'robot': '机械臂',
+      'camera': '摄像头'
+    };
+    return displayNameMap[category] || category;
+  }
 
   // 替换type输入框为下拉框
   function renderTypeSelect(types) {
@@ -253,7 +280,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 监听类别变化
   categorySelect.onchange = function (e) {
-    fetch(`/device/${e.target.value}/adapted_types`)
+    fetch(`/api/device-types/${e.target.value}`)
       .then(res => res.json())
       .then(types => {
         adaptedTypes = types;
@@ -275,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // 打开弹窗时自动触发类别change
   document.getElementById('addDeviceBtn').onclick = () => {
     addDeviceModal.classList.remove('hidden');
-    categorySelect.dispatchEvent(new Event('change'));
+    loadCategories(); // 从API加载分类
   };
   document.getElementById('cancelAddDevice').onclick = () => {
     addDeviceModal.classList.add('hidden');
@@ -287,14 +314,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const form = new FormData(addDeviceForm);
     const category = form.get('category');
     const type = form.get('type');
+    const name = form.get('name');
+    const describe = form.get('describe');
     let config = {};
     (adaptedTypes[type] || []).forEach(field => {
       config[field] = form.get(field);
     });
-    fetch(`/device/${category}/add`, {
+    fetch(`/api/devices/${category}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type, config })
+      body: JSON.stringify({ name, describe, type, config })
     }).then(() => {
       addDeviceModal.classList.add('hidden');
       renderDeviceCards();
@@ -304,13 +333,15 @@ document.addEventListener('DOMContentLoaded', () => {
   // 设备操作API
   // 配置弹窗
   let configModal = null;
-  window.showConfigModal = function (category, id, type, config) {
+  window.showConfigModal = function (category, id, type, config, name, describe) {
     if (configModal) configModal.remove();
     configModal = document.createElement('div');
     configModal.className = 'fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50';
     configModal.innerHTML = `
       <form id="edit-config-form" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md flex flex-col gap-4">
         <h3 class="text-lg font-bold mb-2">配置设备</h3>
+        <input class="border rounded px-2 py-1" name="name" value="${name}" placeholder="设备名称" required>
+        <input class="border rounded px-2 py-1" name="describe" value="${describe}" placeholder="设备描述" required>
         ${Object.entries(config).map(([key, value]) => `<input class="border rounded px-2 py-1" name="${key}" value="${value}" placeholder="${key}" required>`).join('')}
         <div class="flex gap-2 justify-end">
           <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
@@ -324,11 +355,17 @@ document.addEventListener('DOMContentLoaded', () => {
       e.preventDefault();
       const form = new FormData(e.target);
       const newConfig = {};
-      for (const [key, value] of form.entries()) newConfig[key] = value;
-      fetch(`/device/${category}/${id}/config`, {
+      let newName = form.get('name');
+      let newDescribe = form.get('describe');
+      for (const [key, value] of form.entries()) {
+        if (key !== 'name' && key !== 'describe') {
+          newConfig[key] = value;
+        }
+      }
+      fetch(`/api/devices/${category}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config: newConfig })
+        body: JSON.stringify({ name: newName, describe: newDescribe, config: newConfig })
       }).then(() => {
         configModal.remove();
         renderDeviceCards();
@@ -337,15 +374,15 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   window.deleteDevice = function (category, id) {
     if (!confirm('确定要删除该设备吗？')) return;
-    fetch(`/device/${category}/${id}/delete`, { method: 'DELETE' })
+    fetch(`/api/devices/${category}/${id}`, { method: 'DELETE' })
       .then(() => renderDeviceCards());
   };
   window.startDevice = function (category, id) {
-    fetch(`/device/${category}/${id}/start`, { method: 'POST' })
+    fetch(`/api/devices/${category}/${id}/start`, { method: 'POST' })
       .then(() => renderDeviceCards());
   };
   window.stopDevice = function (category, id) {
-    fetch(`/device/${category}/${id}/stop`, { method: 'POST' })
+    fetch(`/api/devices/${category}/${id}/stop`, { method: 'POST' })
       .then(() => renderDeviceCards());
   };
   async function renderTeleopGroups() {
@@ -354,7 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 获取所有遥操作组
     let groups = [];
     try {
-      const res = await fetch('/teleop/list');
+      const res = await fetch('/api/teleop-groups');
       groups = await res.json();
     } catch { }
     container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groups.map(group => `
@@ -376,14 +413,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 启动/停止/删除遥操作组API
   window.startTeleopGroup = function (id) {
-    fetch(`/teleop/${id}/start`, { method: 'POST' }).then(() => renderTeleopGroups());
+    fetch(`/api/teleop-groups/${id}/start`, { method: 'POST' }).then(() => renderTeleopGroups());
   };
   window.stopTeleopGroup = function (id) {
-    fetch(`/teleop/${id}/stop`, { method: 'POST' }).then(() => renderTeleopGroups());
+    fetch(`/api/teleop-groups/${id}/stop`, { method: 'POST' }).then(() => renderTeleopGroups());
   };
   window.deleteTeleopGroup = function (id) {
     if (!confirm('确定要删除该遥操作组吗？')) return;
-    fetch(`/teleop/${id}`, { method: 'DELETE' }).then(() => renderTeleopGroups());
+    fetch(`/api/teleop-groups/${id}`, { method: 'DELETE' }).then(() => renderTeleopGroups());
   };
   // 初始化渲染和轮询刷新
   renderDeviceCards();
