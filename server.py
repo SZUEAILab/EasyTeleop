@@ -9,7 +9,7 @@ import sqlite3
 import os
 import json
 
-from Camera.RealSenseCamera import RealSenseCamera
+from Device.Camera.RealSenseCamera import RealSenseCamera
 from Device.Robot.RealMan import RM_controller
 from Device.VR.VRSocket import VRSocket
 
