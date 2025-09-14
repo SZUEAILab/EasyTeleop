@@ -13,8 +13,6 @@ class RealSenseCamera(BaseDevice):
     
     # 定义需要的配置字段为静态字段
     need_config = {
-        "camera_type": "摄像头类型",
-        "camera_position": "摄像头位置",
         "camera_serial": "摄像头序列号"
     }
     
@@ -49,8 +47,6 @@ class RealSenseCamera(BaseDevice):
                 raise ValueError(f"缺少必需的配置字段: {key}")
         
         self.config = config
-        self.camera_type = config["camera_type"]
-        self.camera_position = config["camera_position"]
         self.camera_serial = config["camera_serial"]
         
         return True

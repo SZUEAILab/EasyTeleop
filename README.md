@@ -1,52 +1,113 @@
-核心类说明
-注意以下模块主循环全都要放在多线程中运行，通过start()和stop()来启动和停止，因为主线程需要运行web服务
-核心是BaseDevice及其继承的子类，简单的继承关系图如下
-暂时无法在飞书文档外展示此内容
-BaseDevice基类
-所有设备的抽象基类，有如下三类业务逻辑
-事件回调
-- _event: Dict[str, Callable]——维护的回调函数字典
-- _default_callback()：默认的空回调函数
-- on(self, event_name: str, callback: Callable) -> bool:注册事件回调
-- off(self, event_name: str) -> bool:移除对应事件注册的回调
-- emit(self, event_name: str, *args, **kwargs) -> None:触发事件
-Config配置
-- need_config: Dict[str, Any] ，注意是静态字段放在init外面
-- set_config():传入config并验证是否满足need_config需要的字段，然后拆解并赋值对应的字段
-连接状态
-- _conn_status：连接状态: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接(红色)
-- start()：根据config启动事件主循环
-- stop()
-关系转换图如下,start后会在12之间切换状态，状态2需要持续尝试重连
-暂时无法在飞书文档外展示此内容
-Robot基类 (Robot/BaseRobot.py)
-- 机器人控制抽象基类，所有具体机器人控制器需继承并实现以下方法：
-  - get_state()：获取当前位姿（需启动轮询线程不断更新自身状态字段）。
-  - get_gripper()：获取当前夹爪状态。
-  - start_control(state, trigger=None)：启动控制，参数为目标位姿和夹爪开合度。
-  - stop_control()：停止控制。
-- 状态获取通过轮询线程不断更新自身 _state 字段，get_state 直接返回该字段。
-- 提供 on_state 回调接口，在轮询线程收到新数据后自动调用，用于自定义逻辑（如数据采集）。
-VRSocket类 (VRSocket.py)
-- 负责与VR头显的TCP Server建立连接，并启动接收线程。
-- 持续接收TCP包，解析为json字典。
-- 通过注册的回调函数（如 on_message），将数据传递给 Teleoperation 处理。
-Teleoperation类 (Teleoperation.py)
-- 负责处理 VRSocket 传递过来的json字典。
-- 每个Key（如 buttonATurnDown）调用对应的回调函数，实现事件驱动。
-- 支持注册自定义事件回调，实现遥操作逻辑。
-DataCollect类 (DataCollect.py)
-- 实现两个线程安全队列：视频帧队列和机械臂状态队列。
-- put_video_frame(frame) 和 put_robot_state(state) 方法用于数据入队。
-- start() 启动消费线程，不断从队列头部取出数据并存储到本地文件系统，带时间戳。
-- 可用于采集和保存遥操作过程中的视频和状态数据。
+# RealMan Teleoperate System
 
-数据通路
-对于一个遥操进程（Teleoperation.py），数据管道如下
-- VRSocket基类负责轮询从各种VR设备获取手臂数据帧并处理成标准格式
-- Robot基类负责轮询获取机械臂当前状态并存储在自身字段
-- 
-对于数据采集，使用后处理思想，先全盘保存所有数据，再完成一次动作后拉起后处理进程后台处理
-DataCollect类本身只负责
-- Robot类自身维护一个线程安全的数据队列，轮询线程获取到新数据后入队
-暂时无法在飞书文档外展示此内容
+RealMan Teleoperate System 是一个基于VR设备控制机械臂的遥操作系统。该系统支持多种设备的集成，包括RealMan机械臂、VR头显和RealSense摄像头，并提供Web界面进行设备管理和遥操作控制。
+
+## 功能特性
+
+- 多设备管理：支持机械臂、VR头显和摄像头设备的统一管理
+- Web界面控制：提供直观的Web界面进行设备配置和状态监控
+- 遥操作组：可配置不同的遥操作组，灵活组合设备
+- 实时状态监控：实时显示设备连接状态和运行情况
+- 数据采集：支持遥操作过程中的数据采集和存储
+
+## 技术架构
+
+### 核心组件
+
+#### BaseDevice 基类
+所有设备的抽象基类，提供统一的接口：
+- 事件回调机制
+- 配置管理
+- 连接状态管理
+
+#### 设备类
+- **Robot类**：机械臂控制抽象基类，具体实现如RM_controller
+- **VRSocket类**：负责与VR头显的TCP连接和数据接收
+- **Camera类**：摄像头设备抽象类，具体实现如RealSenseCamera
+
+#### 核心业务逻辑
+- **TeleopMiddleware**：处理VR数据并转换为机械臂控制指令
+- **DataCollect**：数据采集模块，用于收集遥操作过程中的视频和状态数据
+- **TeleopGroup**：遥操作组管理，协调多个设备协同工作
+
+## 安装指南
+
+### 环境要求
+- Python 3.10+
+- Windows/Linux/macOS
+
+### 安装依赖
+```bash
+pip install -r requirements.txt
+```
+
+或者使用pyproject.toml:
+```bash
+pip install .
+```
+
+### 主要依赖
+- FastAPI: Web框架
+- OpenCV: 图像处理
+- Pyrealsense2: RealSense摄像头支持
+- PyORBBECSDK: ORBBEC摄像头支持
+- robotic-arm: 机械臂控制库
+- numpy, scipy: 科学计算
+
+## 使用方法
+
+### 启动服务
+```bash
+python run.py
+```
+
+访问 http://localhost:8000 查看Web界面
+
+### Web界面功能
+1. **设备管理**：
+   - 查看所有设备状态
+   - 添加/删除设备
+   - 配置设备参数
+   - 启动/停止设备
+
+2. **遥操作组管理**：
+   - 创建遥操作组
+   - 配置组内设备（左右机械臂、VR头显、摄像头）
+   - 启动/停止遥操作
+
+### API接口
+系统提供RESTful API接口，可通过 `/api` 路径访问各种功能。
+
+## 项目结构
+```
+.
+├── Device/                 # 设备相关模块
+│   ├── Camera/             # 摄像头设备
+│   ├── Robot/              # 机械臂设备
+│   └── VR/                 # VR设备
+├── static/                 # Web前端静态文件
+├── test/                   # 测试文件
+├── DataCollect.py          # 数据采集模块
+├── TeleopGroup.py          # 遥操作组管理
+├── TeleopMiddleware.py     # 遥操作中间件
+├── server.py               # Web服务
+└── run.py                  # 主程序入口
+```
+
+## 开发指南
+
+### 添加新设备类型
+1. 继承BaseDevice基类
+2. 实现必要的接口方法（start, stop等）
+3. 在Web界面中注册设备类型
+
+### 扩展遥操作功能
+1. 在TeleopMiddleware中添加新的事件处理
+2. 在前端界面中添加相应的控制元素
+
+## 注意事项
+
+1. 所有设备的主循环都需要放在多线程中运行
+2. 主线程需要运行Web服务，设备控制逻辑不能阻塞主线程
+3. 设备状态有三种：未连接(0)、已连接(1)、断开连接(2)
+4. 系统支持自动重连机制
