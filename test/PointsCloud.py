@@ -2,8 +2,6 @@ import numpy as np
 import socket
 import json
 import time
-from config import Quest_ip, Quest_port
-
 def generate_box_point_cloud(center, size, num_points):
     """
     生成长方体点云
@@ -45,12 +43,13 @@ def send_point_cloud_json(points, host, port, sock=None):
 if __name__ == "__main__":
     center = (0.5, 0.5, 0.5)  # 长方体中心
     size = (0.5, 0.6, 0.3)    # 长1，宽2，高0.5
-    num_points = 100
+    num_points = 500
 
     # 持续不断发送点云
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.connect((Quest_ip, 12346))
+        s.connect(("192.168.0.20", 12346))
         while True:
             point_cloud = generate_box_point_cloud(center, size, num_points)
+            print(point_cloud.shape)
             send_point_cloud_json(point_cloud, host=None, port=None, sock=s)
-            time.sleep(0.5)  # 每0.1秒发送一次，可根据需要调
+            time.sleep(2)  # 每0.1秒发送一次，可根据需要调
