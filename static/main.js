@@ -275,15 +275,39 @@ document.addEventListener('DOMContentLoaded', () => {
                 .replace(/'/g, '&#039;');
             }
             
+            // 格式化配置信息显示
+            let configDisplay = '';
+            if (dev.config && Object.keys(dev.config).length > 0) {
+              configDisplay = Object.entries(dev.config).map(([key, value]) => 
+                `<div class="flex justify-between"><span class="font-medium">${key}:</span><span class="ml-2">${value}</span></div>`
+              ).join('');
+            } else {
+              configDisplay = '<div class="italic text-gray-500">无配置信息</div>';
+            }
+            
             deviceCards.innerHTML += `
               <div class="p-4 bg-gray-50 rounded shadow flex flex-col gap-2 border border-gray-200">
-                <div class="font-bold text-blue-500">${category.toUpperCase()}</div>
-                <div>类型: <span class="font-mono">${dev.type}</span></div>
-                <div>配置: <span class="text-xs">${escapeHtml(JSON.stringify(dev.config))}</span></div>
+                <div class="font-bold text-blue-500">${getCategoryDisplayName(category)} #${dev.id}</div>
+                <div class="flex justify-between">
+                  <span class="font-medium">名称:</span>
+                  <span>${escapeHtml(dev.name)}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="font-medium">类型:</span>
+                  <span class="font-mono">${dev.type}</span>
+                </div>
+                <div class="flex justify-between">
+                  <span class="font-medium">描述:</span>
+                  <span>${escapeHtml(dev.describe || '无')}</span>
+                </div>
+                <div>
+                  <div class="font-medium">配置信息:</div>
+                  <div class="text-xs bg-gray-100 p-2 rounded mt-1">${configDisplay}</div>
+                </div>
                 <!-- 连接状态单独一行显示，按照"连接状态：xxx"格式 -->
                 <div class="flex items-center">
-                  <span>连接状态：</span>
-                  <span class="px-2 py-1 rounded text-white ${statusBgColor} rounded-full">${statusText}</span>
+                  <span class="font-medium">连接状态:</span>
+                  <span class="px-2 py-1 rounded text-white text-xs ${statusBgColor} ml-2">${statusText}</span>
                 </div>
                 <div class="flex items-center gap-2 mt-2">
                   <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick="showConfigModal('${category}',${dev.id},'${dev.type}','${escapeJsonForHtml(JSON.stringify(dev.config))}','${escapeHtml(dev.name)}','${escapeHtml(dev.describe)}')">配置</button>
@@ -450,9 +474,14 @@ document.addEventListener('DOMContentLoaded', () => {
     configModal.innerHTML = `
       <form id="edit-config-form" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md flex flex-col gap-4">
         <h3 class="text-lg font-bold mb-2">配置设备</h3>
-        <input class="border rounded px-2 py-1" name="name" value="${name}" placeholder="设备名称" required>
-        <input class="border rounded px-2 py-1" name="describe" value="${describe}" placeholder="设备描述" required>
-        ${Object.entries(config).map(([key, value]) => `<input class="border rounded px-2 py-1" name="${key}" value="${value}" placeholder="${key}" required>`).join('')}
+        <input type="text" name="name" value="${name}" placeholder="设备名称" required class="border rounded px-2 py-1">
+        <input type="text" name="describe" value="${describe}" placeholder="设备描述" required class="border rounded px-2 py-1">
+        <select name="category" class="border rounded px-2 py-1">
+          <!-- 选项将从API动态加载 -->
+        </select>
+        <select name="type" class="border rounded px-2 py-1">
+          <option value="${type}">${type}</option>
+        </select>
         <div class="flex gap-2 justify-end">
           <button type="submit" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">保存</button>
           <button type="button" id="cancelEditConfig" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">取消</button>
@@ -460,22 +489,73 @@ document.addEventListener('DOMContentLoaded', () => {
       </form>
     `;
     document.body.appendChild(configModal);
+    
+    // 填充设备分类选项
+    const categorySelect = configModal.querySelector('select[name="category"]');
+    fetch('/api/device-categories')
+      .then(res => res.json())
+      .then(data => {
+        data.categories.forEach(cat => {
+          const option = document.createElement('option');
+          option.value = cat;
+          option.textContent = getCategoryDisplayName(cat);
+          option.selected = cat === category;
+          categorySelect.appendChild(option);
+        });
+      });
+    
+    // 动态渲染配置字段
+    let adaptedTypes = {};
+    function renderConfigFields(fields) {
+      // 移除旧字段
+      Array.from(configModal.querySelectorAll('.config-field')).forEach(e => e.remove());
+      // 添加新字段
+      fields.forEach(field => {
+        const input = document.createElement('input');
+        input.className = 'config-field border rounded px-2 py-1';
+        input.name = field;
+        input.placeholder = field;
+        input.value = config[field] || '';
+        input.required = true;
+        configModal.querySelector('.flex').before(input);
+      });
+    }
+    
+    // 加载设备类型配置
+    fetch(`/api/device-types/${category}`)
+      .then(res => res.json())
+      .then(types => {
+        adaptedTypes = types;
+        const configFields = Object.keys(types[type] || {});
+        renderConfigFields(configFields);
+      });
+    
     document.getElementById('cancelEditConfig').onclick = () => configModal.remove();
     document.getElementById('edit-config-form').onsubmit = function (e) {
       e.preventDefault();
       const form = new FormData(e.target);
-      const newConfig = {};
-      let newName = form.get('name');
-      let newDescribe = form.get('describe');
-      for (const [key, value] of form.entries()) {
-        if (key !== 'name' && key !== 'describe') {
-          newConfig[key] = value;
-        }
-      }
+      const newCategory = form.get('category');
+      const newType = form.get('type');
+      const newName = form.get('name');
+      const newDescribe = form.get('describe');
+      
+      // 获取配置字段
+      let newConfig = {};
+      const typeConfig = adaptedTypes[newType] || {};
+      Object.keys(typeConfig).forEach(field => {
+        newConfig[field] = form.get(field);
+      });
+      
       fetch(`/api/devices/${category}/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newName, describe: newDescribe, config: newConfig })
+        body: JSON.stringify({ 
+          name: newName, 
+          describe: newDescribe, 
+          category: newCategory,
+          type: newType,
+          config: newConfig 
+        })
       }).then(response => {
         if (response.ok) {
           configModal.remove();
