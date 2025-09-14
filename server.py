@@ -35,6 +35,13 @@ class TeleopGroup:
         self.config = config
         self.teleop = None
         self.running = False
+        # 设备引用
+        self.left_arm = None
+        self.right_arm = None
+        self.vr = None
+        self.camera1 = None
+        self.camera2 = None
+        self.camera3 = None
 
     def start(self, device_pool):
         print("TeleopGroup.start中设备池内容:", {k: list(v.keys()) for k, v in device_pool.items()})
@@ -42,30 +49,44 @@ class TeleopGroup:
         self.teleop = TeleopMiddleware()
         print(self.config)
         # 左手臂
-        left_id = self.config.get('left_arm')
+        left_id = self.config.get('left_arm_id')
         if isinstance(left_id, str) and left_id.isdigit():
             left_id = int(left_id)
-        self.left_arm = device_pool['robot'].get(left_id)
+        self.left_arm = device_pool['robot'].get(left_id) if left_id else None
         if self.left_arm:
             self.teleop.on("leftGripDown", self.left_arm.start_control)
             self.teleop.on("leftGripUp", self.left_arm.stop_control)
         # 右手臂
-        right_id = (self.config.get('right_arm'))
+        right_id = self.config.get('right_arm_id')
         if isinstance(right_id, str) and right_id.isdigit():
             right_id = int(right_id)
-        self.right_arm = device_pool['robot'].get(right_id)
+        self.right_arm = device_pool['robot'].get(right_id) if right_id else None
         if self.right_arm:
             self.teleop.on("rightGripDown", self.right_arm.start_control)
             self.teleop.on("rightGripUp", self.right_arm.stop_control)
         # VR头显
-        vr_id = (self.config.get('vr'))
+        vr_id = self.config.get('vr_id')
         if isinstance(vr_id, str) and vr_id.isdigit():
             vr_id = int(vr_id)
-        self.vr = device_pool['vr'].get(vr_id)
+        self.vr = device_pool['vr'].get(vr_id) if vr_id else None
         if self.vr:
             self.vr.on("message",self.teleop.handle_socket_data)
         # 摄像头（可选）
-        # 可按需扩展摄像头相关逻辑
+        camera1_id = self.config.get('camera1_id')
+        if isinstance(camera1_id, str) and camera1_id.isdigit():
+            camera1_id = int(camera1_id)
+        self.camera1 = device_pool['camera'].get(camera1_id) if camera1_id else None
+        
+        camera2_id = self.config.get('camera2_id')
+        if isinstance(camera2_id, str) and camera2_id.isdigit():
+            camera2_id = int(camera2_id)
+        self.camera2 = device_pool['camera'].get(camera2_id) if camera2_id else None
+        
+        camera3_id = self.config.get('camera3_id')
+        if isinstance(camera3_id, str) and camera3_id.isdigit():
+            camera3_id = int(camera3_id)
+        self.camera3 = device_pool['camera'].get(camera3_id) if camera3_id else None
+        
         self.running = True
 
     def stop(self):
@@ -99,6 +120,31 @@ def init_device_tables(db_path):
             is_active BOOLEAN DEFAULT 1
         )
     ''')
+    
+    # 遥操作组表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS teleop_groups (
+            id VARCHAR(50) PRIMARY KEY,
+            name VARCHAR(100) NOT NULL,
+            describe TEXT,
+            left_arm_id INTEGER,
+            right_arm_id INTEGER,
+            vr_id INTEGER,
+            camera1_id INTEGER,
+            camera2_id INTEGER,
+            camera3_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_active BOOLEAN DEFAULT 1,
+            FOREIGN KEY (left_arm_id) REFERENCES devices (id),
+            FOREIGN KEY (right_arm_id) REFERENCES devices (id),
+            FOREIGN KEY (vr_id) REFERENCES devices (id),
+            FOREIGN KEY (camera1_id) REFERENCES devices (id),
+            FOREIGN KEY (camera2_id) REFERENCES devices (id),
+            FOREIGN KEY (camera3_id) REFERENCES devices (id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 
@@ -133,13 +179,29 @@ class DeviceCategoryResponse(BaseModel):
     categories: List[str]
 
 class TeleopGroupBase(BaseModel):
-    config: dict
+    name: str
+    describe: Optional[str] = None
+    left_arm_id: Optional[int] = None
+    right_arm_id: Optional[int] = None
+    vr_id: Optional[int] = None
+    camera1_id: Optional[int] = None
+    camera2_id: Optional[int] = None
+    camera3_id: Optional[int] = None
 
 class TeleopGroupCreate(TeleopGroupBase):
     pass
 
 class TeleopGroupUpdate(TeleopGroupBase):
-    pass
+    name: Optional[str] = None
+
+class TeleopGroupInDB(TeleopGroupBase):
+    id: str
+    created_at: str
+    updated_at: str
+    is_active: bool
+
+    class Config:
+        from_attributes = True
 
 class TeleopGroupResponse(TeleopGroupBase):
     id: str
@@ -157,7 +219,9 @@ async def lifespan(app: FastAPI):
     # 在应用启动时初始化设备池
     init_device_tables(DB_PATH)
     init_device_pool()
+    init_teleop_groups()
     print("FastAPI应用启动，设备池内容:", {k: list(v.keys()) for k, v in device_pool.items()})
+    print("FastAPI应用启动，遥操作组内容:", list(TELEOP_GROUPS.keys()))
     yield
     # 应用关闭时的清理代码可以放在这里
     print("FastAPI应用正在关闭...")
@@ -204,6 +268,28 @@ def init_device_pool():
     
     conn.close()
 
+# Initialize teleop groups based on database records
+def init_teleop_groups():
+    global TELEOP_GROUPS
+    TELEOP_GROUPS = {}
+    
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id FROM teleop_groups WHERE is_active=1")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    for row in rows:
+        group_id = row[0]
+        config = {
+            "left_arm_id": row[1],
+            "right_arm_id": row[2],
+            "vr_id": row[3],
+            "camera1_id": row[4],
+            "camera2_id": row[5],
+            "camera3_id": row[6]
+        }
+        TELEOP_GROUPS[group_id] = TeleopGroup(group_id, config)
 
 # 1. 获取所有设备 type+config
 @app.get("/api/devices", response_model=Dict[str, List[Device]])
@@ -413,51 +499,207 @@ def get_device_categories():
 # 获取所有遥操作组列表
 @app.get("/api/teleop-groups", response_model=List[TeleopGroupResponse])
 def list_teleop_groups():
-    return [
-        TeleopGroupResponse(id=g.id, config=g.config, running=g.running)
-        for g in TELEOP_GROUPS.values()
-    ]
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, name, describe, left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id FROM teleop_groups WHERE is_active=1")
+    rows = cursor.fetchall()
+    conn.close()
+    
+    result = []
+    for row in rows:
+        group_id = row[0]
+        config = {
+            "left_arm_id": row[3],
+            "right_arm_id": row[4],
+            "vr_id": row[5],
+            "camera1_id": row[6],
+            "camera2_id": row[7],
+            "camera3_id": row[8]
+        }
+        # Check if group is running
+        running = group_id in TELEOP_GROUPS and TELEOP_GROUPS[group_id].running
+        result.append(TeleopGroupResponse(id=group_id, name=row[1], describe=row[2], **config, running=running))
+    
+    return result
 
 # 创建遥操作组
 @app.post("/api/teleop-groups/{group_id}", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
 def create_teleop_group(group_id: str, teleop_group: TeleopGroupCreate):
-    if group_id in TELEOP_GROUPS:
+    # 检查是否已存在
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM teleop_groups WHERE id=?", (group_id,))
+    if cursor.fetchone():
+        conn.close()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="遥操作组已存在")
-    TELEOP_GROUPS[group_id] = TeleopGroup(group_id, teleop_group.config)
+    
+    # 插入新记录
+    cursor.execute('''INSERT INTO teleop_groups 
+                     (id, name, describe, left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (group_id, teleop_group.name, teleop_group.describe,
+                   teleop_group.left_arm_id, teleop_group.right_arm_id, teleop_group.vr_id,
+                   teleop_group.camera1_id, teleop_group.camera2_id, teleop_group.camera3_id))
+    conn.commit()
+    conn.close()
+    
+    # 在内存中创建对象
+    config = {
+        "left_arm_id": teleop_group.left_arm_id,
+        "right_arm_id": teleop_group.right_arm_id,
+        "vr_id": teleop_group.vr_id,
+        "camera1_id": teleop_group.camera1_id,
+        "camera2_id": teleop_group.camera2_id,
+        "camera3_id": teleop_group.camera3_id
+    }
+    TELEOP_GROUPS[group_id] = TeleopGroup(group_id, config)
+    
     return MessageResponse(message="遥操作组已创建")
 
 # 更新遥操作组
 @app.put("/api/teleop-groups/{group_id}", response_model=MessageResponse)
 def update_teleop_group(group_id: str, teleop_group: TeleopGroupUpdate):
-    if group_id not in TELEOP_GROUPS:
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM teleop_groups WHERE id=?", (group_id,))
+    if not cursor.fetchone():
+        conn.close()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
-    TELEOP_GROUPS[group_id].config = teleop_group.config
+    
+    # 更新记录
+    cursor.execute('''UPDATE teleop_groups SET 
+                     name=COALESCE(?, name), 
+                     describe=COALESCE(?, describe),
+                     left_arm_id=COALESCE(?, left_arm_id),
+                     right_arm_id=COALESCE(?, right_arm_id),
+                     vr_id=COALESCE(?, vr_id),
+                     camera1_id=COALESCE(?, camera1_id),
+                     camera2_id=COALESCE(?, camera2_id),
+                     camera3_id=COALESCE(?, camera3_id),
+                     updated_at=CURRENT_TIMESTAMP
+                     WHERE id=?''',
+                  (teleop_group.name, teleop_group.describe,
+                   teleop_group.left_arm_id, teleop_group.right_arm_id, teleop_group.vr_id,
+                   teleop_group.camera1_id, teleop_group.camera2_id, teleop_group.camera3_id,
+                   group_id))
+    conn.commit()
+    conn.close()
+    
+    # 更新内存中的对象
+    if group_id in TELEOP_GROUPS:
+        config = {
+            "left_arm_id": teleop_group.left_arm_id or TELEOP_GROUPS[group_id].config.get("left_arm_id"),
+            "right_arm_id": teleop_group.right_arm_id or TELEOP_GROUPS[group_id].config.get("right_arm_id"),
+            "vr_id": teleop_group.vr_id or TELEOP_GROUPS[group_id].config.get("vr_id"),
+            "camera1_id": teleop_group.camera1_id or TELEOP_GROUPS[group_id].config.get("camera1_id"),
+            "camera2_id": teleop_group.camera2_id or TELEOP_GROUPS[group_id].config.get("camera2_id"),
+            "camera3_id": teleop_group.camera3_id or TELEOP_GROUPS[group_id].config.get("camera3_id")
+        }
+        TELEOP_GROUPS[group_id].config = config
+    else:
+        # 如果内存中没有对象，则创建
+        config = {
+            "left_arm_id": teleop_group.left_arm_id,
+            "right_arm_id": teleop_group.right_arm_id,
+            "vr_id": teleop_group.vr_id,
+            "camera1_id": teleop_group.camera1_id,
+            "camera2_id": teleop_group.camera2_id,
+            "camera3_id": teleop_group.camera3_id
+        }
+        TELEOP_GROUPS[group_id] = TeleopGroup(group_id, config)
+    
     return MessageResponse(message="遥操作组已更新")
 
 # 删除遥操作组
 @app.delete("/api/teleop-groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_teleop_group(group_id: str):
-    if group_id not in TELEOP_GROUPS:
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM teleop_groups WHERE id=?", (group_id,))
+    if not cursor.fetchone():
+        conn.close()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
-    del TELEOP_GROUPS[group_id]
+    
+    # 删除记录
+    cursor.execute("DELETE FROM teleop_groups WHERE id=?", (group_id,))
+    conn.commit()
+    conn.close()
+    
+    # 从内存中移除对象
+    if group_id in TELEOP_GROUPS:
+        del TELEOP_GROUPS[group_id]
+    
     return None
 
 # 获取遥操作组配置
-@app.get("/api/teleop-groups/{group_id}", response_model=TeleopGroupResponse)
+@app.get("/api/teleop-groups/{group_id}", response_model=TeleopGroupInDB)
 def get_teleop_group(group_id: str):
-    group = TELEOP_GROUPS.get(group_id)
-    if not group:
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute('''SELECT id, name, describe, left_arm_id, right_arm_id, vr_id, 
+                     camera1_id, camera2_id, camera3_id, created_at, updated_at, is_active 
+                     FROM teleop_groups WHERE id=?''', (group_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
-    return TeleopGroupResponse(id=group.id, config=group.config, running=group.running)
+    
+    return TeleopGroupInDB(
+        id=row[0],
+        name=row[1],
+        describe=row[2],
+        left_arm_id=row[3],
+        right_arm_id=row[4],
+        vr_id=row[5],
+        camera1_id=row[6],
+        camera2_id=row[7],
+        camera3_id=row[8],
+        created_at=row[9],
+        updated_at=row[10],
+        is_active=bool(row[11])
+    )
 
 # 启动遥操作组
 @app.post("/api/teleop-groups/{group_id}/start", response_model=MessageResponse)
 # about bussiness logic
 def start_teleop_group(group_id: str):
-    group = TELEOP_GROUPS.get(group_id)
-    if not group:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
-    group.start(device_pool)
+    # 检查是否存在
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM teleop_groups WHERE id=? AND is_active=1", (group_id,))
+    if not cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在或未启用")
+    
+    # 获取配置
+    cursor.execute('''SELECT left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id 
+                     FROM teleop_groups WHERE id=?''', (group_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组配置不存在")
+    
+    # 创建配置字典
+    config = {
+        "left_arm_id": row[0],
+        "right_arm_id": row[1],
+        "vr_id": row[2],
+        "camera1_id": row[3],
+        "camera2_id": row[4],
+        "camera3_id": row[5]
+    }
+    
+    # 如果内存中没有对象，则创建
+    if group_id not in TELEOP_GROUPS:
+        TELEOP_GROUPS[group_id] = TeleopGroup(group_id, config)
+    else:
+        # 更新配置
+        TELEOP_GROUPS[group_id].config = config
+    
+    # 启动遥操作组
+    TELEOP_GROUPS[group_id].start(device_pool)
     return MessageResponse(message="遥操作已启动")
 
 # 停止遥操作组
@@ -468,8 +710,6 @@ def stop_teleop_group(group_id: str):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
     group.stop()
     return MessageResponse(message="遥操作已停止")
-
-
 
 app.mount("/", StaticFiles(directory="static"), name="index")
 

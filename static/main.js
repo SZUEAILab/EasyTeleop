@@ -11,46 +11,52 @@ window.showTeleopModal = async function (group = null) {
   if (teleopModal) teleopModal.remove();
   const devices = await getDeviceOptions();
   // 组配置
-  const config = group ? group.config : {};
+  const config = group ? group : {};
   teleopModal = document.createElement('div');
   teleopModal.className = 'fixed inset-0 bg-black bg-opacity-30 flex items-center justify-center z-50';
   teleopModal.innerHTML = `
       <form id="teleop-form" class="bg-white p-6 rounded-lg shadow-lg w-full max-w-md flex flex-col gap-4">
         <h3 class="text-lg font-bold mb-2">${group ? '编辑' : '新建'}遥操作组</h3>
+        <label>组名称:
+          <input type="text" name="name" value="${config.name || ''}" placeholder="遥操作组名称" required class="border rounded px-2 py-1 w-full">
+        </label>
+        <label>描述:
+          <input type="text" name="describe" value="${config.describe || ''}" placeholder="遥操作组描述" class="border rounded px-2 py-1 w-full">
+        </label>
         <label>左臂:
-          <select name="left_arm" class="border rounded px-2 py-1">
+          <select name="left_arm_id" class="border rounded px-2 py-1 w-full">
             <option value="">无</option>
-            ${(devices.robot || []).map(dev => `<option value="${dev.id}" ${config.left_arm == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.robot || []).map(dev => `<option value="${dev.id}" ${config.left_arm_id == dev.id ? 'selected' : ''}>${dev.type}#${dev.id} - ${dev.name}</option>`).join('')}
           </select>
         </label>
         <label>右臂:
-          <select name="right_arm" class="border rounded px-2 py-1">
+          <select name="right_arm_id" class="border rounded px-2 py-1 w-full">
             <option value="">无</option>
-            ${(devices.robot || []).map(dev => `<option value="${dev.id}" ${config.right_arm == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.robot || []).map(dev => `<option value="${dev.id}" ${config.right_arm_id == dev.id ? 'selected' : ''}>${dev.type}#${dev.id} - ${dev.name}</option>`).join('')}
           </select>
         </label>
         <label>头显:
-          <select name="vr" class="border rounded px-2 py-1">
+          <select name="vr_id" class="border rounded px-2 py-1 w-full">
             <option value="">无</option>
-            ${(devices.vr || []).map(dev => `<option value="${dev.id}" ${config.vr == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.vr || []).map(dev => `<option value="${dev.id}" ${config.vr_id == dev.id ? 'selected' : ''}>${dev.type}#${dev.id} - ${dev.name}</option>`).join('')}
           </select>
         </label>
-        <label>头部摄像头:
-          <select name="head_camera" class="border rounded px-2 py-1">
+        <label>摄像头1:
+          <select name="camera1_id" class="border rounded px-2 py-1 w-full">
             <option value="">无</option>
-            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.head_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.camera1_id == dev.id ? 'selected' : ''}>${dev.type}#${dev.id} - ${dev.name}</option>`).join('')}
           </select>
         </label>
-        <label>左腕摄像头:
-          <select name="left_camera" class="border rounded px-2 py-1">
+        <label>摄像头2:
+          <select name="camera2_id" class="border rounded px-2 py-1 w-full">
             <option value="">无</option>
-            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.left_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.camera2_id == dev.id ? 'selected' : ''}>${dev.type}#${dev.id} - ${dev.name}</option>`).join('')}
           </select>
         </label>
-        <label>右腕摄像头:
-          <select name="right_camera" class="border rounded px-2 py-1">
+        <label>摄像头3:
+          <select name="camera3_id" class="border rounded px-2 py-1 w-full">
             <option value="">无</option>
-            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.right_camera == dev.id ? 'selected' : ''}>${dev.type}#${dev.id}</option>`).join('')}
+            ${(devices.camera || []).map(dev => `<option value="${dev.id}" ${config.camera3_id == dev.id ? 'selected' : ''}>${dev.type}#${dev.id} - ${dev.name}</option>`).join('')}
           </select>
         </label>
         <div class="flex gap-2 justify-end">
@@ -61,32 +67,57 @@ window.showTeleopModal = async function (group = null) {
     `;
   document.body.appendChild(teleopModal);
   document.getElementById('cancelTeleop').onclick = () => teleopModal.remove();
-  document.getElementById('teleop-form').onsubmit = function (e) {
+  document.getElementById('teleop-form').onsubmit = async function (e) {
     e.preventDefault();
     const form = new FormData(e.target);
-    const config = {};
-    for (const [key, value] of form.entries()) {
-      config[key] = value || null;
-    }
+    const groupData = {
+      name: form.get('name'),
+      describe: form.get('describe') || '',
+      left_arm_id: form.get('left_arm_id') ? parseInt(form.get('left_arm_id')) : null,
+      right_arm_id: form.get('right_arm_id') ? parseInt(form.get('right_arm_id')) : null,
+      vr_id: form.get('vr_id') ? parseInt(form.get('vr_id')) : null,
+      camera1_id: form.get('camera1_id') ? parseInt(form.get('camera1_id')) : null,
+      camera2_id: form.get('camera2_id') ? parseInt(form.get('camera2_id')) : null,
+      camera3_id: form.get('camera3_id') ? parseInt(form.get('camera3_id')) : null
+    };
+    
     if (group) {
-      fetch(`/api/teleop-groups/${group.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config })
-      }).then(() => {
-        teleopModal.remove();
-        renderTeleopGroups();
-      });
+      // 更新现有遥操作组
+      try {
+        const response = await fetch(`/api/teleop-groups/${group.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(groupData)
+        });
+        if (response.ok) {
+          teleopModal.remove();
+          renderTeleopGroups();
+        } else {
+          alert('更新遥操作组失败');
+        }
+      } catch (error) {
+        console.error('更新遥操作组出错:', error);
+        alert('更新遥操作组出错');
+      }
     } else {
+      // 创建新的遥操作组
       const newId = 'group_' + Date.now();
-      fetch(`/api/teleop-groups/${newId}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ config })
-      }).then(() => {
-        teleopModal.remove();
-        renderTeleopGroups();
-      });
+      try {
+        const response = await fetch(`/api/teleop-groups/${newId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(groupData)
+        });
+        if (response.ok) {
+          teleopModal.remove();
+          renderTeleopGroups();
+        } else {
+          alert('创建遥操作组失败');
+        }
+      } catch (error) {
+        console.error('创建遥操作组出错:', error);
+        alert('创建遥操作组出错');
+      }
     }
   };
 };
@@ -100,16 +131,39 @@ async function renderTeleopGroups() {
   try {
     const res = await fetch('/api/teleop-groups');
     groups = await res.json();
-  } catch { }
+  } catch (error) {
+    console.error('获取遥操作组列表失败:', error);
+  }
+  
+  // 获取设备信息用于显示设备名称
+  let devices = {};
+  try {
+    const res = await fetch('/api/devices');
+    devices = await res.json();
+  } catch (error) {
+    console.error('获取设备列表失败:', error);
+  }
+  
+  function getDeviceName(category, deviceId) {
+    if (!deviceId) return '无';
+    const deviceList = devices[category] || [];
+    const device = deviceList.find(d => d.id === deviceId);
+    return device ? `${device.type}#${device.id} - ${device.name}` : `未知设备#${deviceId}`;
+  }
+  
   container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groups.map(group => `
     <div class="p-4 bg-white rounded shadow flex flex-col gap-2 border border-gray-200">
       <div class="font-bold text-blue-600">组ID: ${group.id}</div>
-      <div>左臂: ${group.config.left_arm || '无'} | 右臂: ${group.config.right_arm || '无'} | 头显: ${group.config.vr || '无'}</div>
-      <div>摄像头: ${group.config.head_camera || '无'} / ${group.config.left_camera || '无'} / ${group.config.right_camera || '无'}</div>
-      <div class="flex gap-2 mt-2">
-        <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick='showTeleopModal(${JSON.stringify(group)})'>配置</button>
-        <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700" onclick='deleteTeleopGroup("${group.id}")'>删除</button>
-        <button class="px-2 py-1 ${group.running ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded" onclick='${group.running ? `stopTeleopGroup("${group.id}")` : `startTeleopGroup("${group.id}")`}'>${group.running ? '停止' : '启动'}</button>
+      <div class="font-medium">${group.name}</div>
+      <div class="text-sm text-gray-600">${group.describe || '无描述'}</div>
+      <div class="text-sm">左臂: ${getDeviceName('robot', group.left_arm_id)}</div>
+      <div class="text-sm">右臂: ${getDeviceName('robot', group.right_arm_id)}</div>
+      <div class="text-sm">头显: ${getDeviceName('vr', group.vr_id)}</div>
+      <div class="text-sm">摄像头: ${getDeviceName('camera', group.camera1_id)} | ${getDeviceName('camera', group.camera2_id)} | ${getDeviceName('camera', group.camera3_id)}</div>
+      <div class="flex gap-2 mt-2 flex-wrap">
+        <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-sm" onclick='showTeleopModal(${JSON.stringify(group)})'>配置</button>
+        <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700 text-sm" onclick='deleteTeleopGroup("${group.id}")'>删除</button>
+        <button class="px-2 py-1 ${group.running ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded text-sm" onclick='${group.running ? `stopTeleopGroup("${group.id}")` : `startTeleopGroup("${group.id}")`}'>${group.running ? '停止' : '启动'}</button>
       </div>
     </div>
     
@@ -457,16 +511,39 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       const res = await fetch('/api/teleop-groups');
       groups = await res.json();
-    } catch { }
+    } catch (error) {
+      console.error('获取遥操作组列表失败:', error);
+    }
+    
+    // 获取设备信息用于显示设备名称
+    let devices = {};
+    try {
+      const res = await fetch('/api/devices');
+      devices = await res.json();
+    } catch (error) {
+      console.error('获取设备列表失败:', error);
+    }
+    
+    function getDeviceName(category, deviceId) {
+      if (!deviceId) return '无';
+      const deviceList = devices[category] || [];
+      const device = deviceList.find(d => d.id === deviceId);
+      return device ? `${device.type}#${device.id} - ${device.name}` : `未知设备#${deviceId}`;
+    }
+    
     container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groups.map(group => `
       <div class="p-4 bg-white rounded shadow flex flex-col gap-2 border border-gray-200">
         <div class="font-bold text-blue-600">组ID: ${group.id}</div>
-        <div>左臂: ${group.config.left_arm || '无'} | 右臂: ${group.config.right_arm || '无'} | 头显: ${group.config.vr || '无'}</div>
-        <div>摄像头: ${group.config.head_camera || '无'} / ${group.config.left_camera || '无'} / ${group.config.right_camera || '无'}</div>
-        <div class="flex gap-2 mt-2">
-          <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500" onclick='showTeleopModal(${JSON.stringify(group)})'>配置</button>
-          <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700" onclick='deleteTeleopGroup("${group.id}")'>删除</button>
-          <button class="px-2 py-1 ${group.running ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded" onclick='${group.running ? `stopTeleopGroup("${group.id}")` : `startTeleopGroup("${group.id}")`}'>${group.running ? '停止' : '启动'}</button>
+        <div class="font-medium">${group.name}</div>
+        <div class="text-sm text-gray-600">${group.describe || '无描述'}</div>
+        <div class="text-sm">左臂: ${getDeviceName('robot', group.left_arm_id)}</div>
+        <div class="text-sm">右臂: ${getDeviceName('robot', group.right_arm_id)}</div>
+        <div class="text-sm">头显: ${getDeviceName('vr', group.vr_id)}</div>
+        <div class="text-sm">摄像头: ${getDeviceName('camera', group.camera1_id)} | ${getDeviceName('camera', group.camera2_id)} | ${getDeviceName('camera', group.camera3_id)}</div>
+        <div class="flex gap-2 mt-2 flex-wrap">
+          <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-sm" onclick='showTeleopModal(${JSON.stringify(group)})'>配置</button>
+          <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700 text-sm" onclick='deleteTeleopGroup("${group.id}")'>删除</button>
+          <button class="px-2 py-1 ${group.running ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded text-sm" onclick='${group.running ? `stopTeleopGroup("${group.id}")` : `startTeleopGroup("${group.id}")`}'>${group.running ? '停止' : '启动'}</button>
         </div>
       </div>
       
@@ -476,16 +553,49 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // 启动/停止/删除遥操作组API
-  window.startTeleopGroup = function (id) {
-    fetch(`/api/teleop-groups/${id}/start`, { method: 'POST' }).then(() => renderTeleopGroups());
+  window.startTeleopGroup = async function (id) {
+    try {
+      const response = await fetch(`/api/teleop-groups/${id}/start`, { method: 'POST' });
+      if (response.ok) {
+        renderTeleopGroups();
+      } else {
+        alert('启动遥操作组失败');
+      }
+    } catch (error) {
+      console.error('启动遥操作组出错:', error);
+      alert('启动遥操作组出错');
+    }
   };
-  window.stopTeleopGroup = function (id) {
-    fetch(`/api/teleop-groups/${id}/stop`, { method: 'POST' }).then(() => renderTeleopGroups());
+
+  window.stopTeleopGroup = async function (id) {
+    try {
+      const response = await fetch(`/api/teleop-groups/${id}/stop`, { method: 'POST' });
+      if (response.ok) {
+        renderTeleopGroups();
+      } else {
+        alert('停止遥操作组失败');
+      }
+    } catch (error) {
+      console.error('停止遥操作组出错:', error);
+      alert('停止遥操作组出错');
+    }
   };
-  window.deleteTeleopGroup = function (id) {
+
+  window.deleteTeleopGroup = async function (id) {
     if (!confirm('确定要删除该遥操作组吗？')) return;
-    fetch(`/api/teleop-groups/${id}`, { method: 'DELETE' }).then(() => renderTeleopGroups());
+    try {
+      const response = await fetch(`/api/teleop-groups/${id}`, { method: 'DELETE' });
+      if (response.ok) {
+        renderTeleopGroups();
+      } else {
+        alert('删除遥操作组失败');
+      }
+    } catch (error) {
+      console.error('删除遥操作组出错:', error);
+      alert('删除遥操作组出错');
+    }
   };
+
   // 初始化渲染和轮询刷新
   renderDeviceCards();
   renderTeleopGroups();
