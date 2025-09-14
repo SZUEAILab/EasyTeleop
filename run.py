@@ -14,6 +14,9 @@ if __name__ == '__main__':
         teleop = TeleopMiddleware()
         camera1 = RealSenseCamera({"serial":"153122070447"})        
 
+        def print_frame(frame):
+            dc.put_video_frame(frame)
+        
         camera1.on("frame", dc.put_video_frame)
         def print_left_arm_state(state):
             dc.put_robot_state(state)

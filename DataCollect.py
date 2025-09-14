@@ -12,7 +12,8 @@ class DataCollect:
         self.video_dir = video_dir
         self.state_file = state_file
         os.makedirs(self.video_dir, exist_ok=True)
-        self.consumer_thread = None
+        self.video_consumer_thread = None
+        self.state_consumer_thread = None
 
     def put_video_frame(self, frame, ts=None):
         """向视频队列添加帧（frame为numpy数组），附带时间戳"""
@@ -30,30 +31,38 @@ class DataCollect:
         """启动消费线程"""
         if not self.running:
             self.running = True
-            self.consumer_thread = threading.Thread(target=self._consume, daemon=True)
-            self.consumer_thread.start()
+            # 启动两个独立的消费线程
+            self.video_consumer_thread = threading.Thread(target=self._consume_video, daemon=True)
+            self.state_consumer_thread = threading.Thread(target=self._consume_state, daemon=True)
+            self.video_consumer_thread.start()
+            self.state_consumer_thread.start()
 
     def stop(self):
         """停止消费线程"""
         self.running = False
-        if self.consumer_thread:
-            self.consumer_thread.join()
+        if self.video_consumer_thread:
+            self.video_consumer_thread.join()
+        if self.state_consumer_thread:
+            self.state_consumer_thread.join()
 
-    def _consume(self):
-        """消费线程：不断取出队列头部数据并存储到本地"""
+    def _consume_video(self):
+        """消费视频帧线程：不断取出视频队列头部数据并存储到本地"""
         while self.running:
-            # 处理视频帧
             try:
                 ts, frame = self.video_queue.get(timeout=0.1)
                 filename = os.path.join(self.video_dir, f"frame_{ts:.3f}.jpg")
                 cv2.imwrite(filename, frame)
+                self.video_queue.task_done()
             except queue.Empty:
                 pass
 
-            # 处理机械臂状态
+    def _consume_state(self):
+        """消费机械臂状态线程：不断取出状态队列头部数据并存储到本地"""
+        while self.running:
             try:
                 ts, state = self.state_queue.get(timeout=0.1)
                 with open(self.state_file, "a", encoding="utf-8") as f:
                     f.write(f"{ts:.3f}: {state}\n")
+                self.state_queue.task_done()
             except queue.Empty:
                 pass

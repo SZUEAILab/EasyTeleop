@@ -18,11 +18,15 @@ class RM_controller(Robot):
     
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        
         self.ip = None
         self.port = None
         
-        self.poll_interval = 0.01  # 轮询间隔（秒）
+        self._events = {
+            "state": self._default_callback,
+        }
+        
+        self.target_fps = 30  # 目标帧率
+        self.min_interval = 1.0 / self.target_fps  # 最小间隔时间
         
         self.arm_controller = None
         self.handle = None
@@ -36,7 +40,6 @@ class RM_controller(Robot):
         # 线程相关变量
         
         self.polling_thread = None
-        self.polling_running = False
         self.state_lock = Lock()  # 用于线程安全访问状态变量
         
         # 原有变量
@@ -113,10 +116,12 @@ class RM_controller(Robot):
         return True
 
     def _poll_state(self):
-        while self.polling_running:
+        last_time = time.time()
+        while True:
             try:
                 succ, arm_state = self.arm_controller.rm_get_current_arm_state()
                 if not succ:
+                    
                     with self.state_lock:
                         self.current_state = arm_state["pose"]
                         self.emit("state",self.current_state)#调用回调函数
@@ -131,7 +136,12 @@ class RM_controller(Robot):
                 print(f"Error polling robot state: {str(e)}")
                 break
             
-            time.sleep(self.poll_interval)
+            # 帧率控制，而不是固定间隔
+            current_time = time.time()
+            elapsed = current_time - last_time
+            if elapsed < self.min_interval:
+                time.sleep(self.min_interval - elapsed)
+            last_time = time.time()
 
     def get_state(self):
         """获取当前状态（线程安全）"""

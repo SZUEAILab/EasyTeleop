@@ -13,7 +13,7 @@ class RealSenseCamera(BaseDevice):
     
     # 定义需要的配置字段为静态字段
     need_config = {
-        "camera_serial": "摄像头序列号"
+        "serial": "摄像头序列号"
     }
     
     def __init__(self, config: Dict[str, Any]):
@@ -21,7 +21,8 @@ class RealSenseCamera(BaseDevice):
         self.camera_type = None
         self.camera_position = None
         self.camera_serial = None
-        self.poll_interval = 0.01  # 轮询间隔（秒）
+        self.target_fps = 30  # 目标帧率
+        self.min_interval = 1.0 / self.target_fps  # 最小间隔时间
         self.polling_thread = None
         self.polling_running = False
         self.pipeline = None    # 存储pipeline对象
@@ -47,7 +48,7 @@ class RealSenseCamera(BaseDevice):
                 raise ValueError(f"缺少必需的配置字段: {key}")
         
         self.config = config
-        self.camera_serial = config["camera_serial"]
+        self.camera_serial = config["serial"]
         
         return True
 
@@ -103,6 +104,7 @@ class RealSenseCamera(BaseDevice):
             self.polling_thread = None
 
     def _poll_state(self):
+        last_time = time.time()
         while self.polling_running:
             try:
                 color_frame, depth_frame = self.get_frames()
@@ -112,7 +114,12 @@ class RealSenseCamera(BaseDevice):
                 print(f"Error polling robot state: {str(e)}")
                 break
             
-            time.sleep(self.poll_interval)
+            # 帧率控制，而不是固定间隔
+            current_time = time.time()
+            elapsed = current_time - last_time
+            if elapsed < self.min_interval:
+                time.sleep(self.min_interval - elapsed)
+            last_time = time.time()
 
     def is_connected(self) -> bool:
         """检查RealSense摄像头是否连接"""
@@ -149,49 +156,3 @@ class RealSenseCamera(BaseDevice):
 
     def __del__(self):
         self.stop()
-
-# if __name__ == "__main__":
-#     CAMERA_SERIALS = {
-#     "RealSense": {
-#         'head': '153122070447',  
-#         'left_wrist': '427622270438',   
-#         'right_wrist': '427622270277',   
-#     }
-# }
-#     camera1 = RealSenseCamera({"serial":"153122070447"})
-#     camera1.connect()
-#     while 1:
-            
-#         color_frame, depth_frame = camera1.get_frames()
-#         depth_frame = cv2.applyColorMap(cv2.convertScaleAbs(depth_frame, alpha=0.03), cv2.COLORMAP_JET)
-        
-#         if color_frame is not None and depth_frame is not None:
-#             try:
-#                 cv2.imshow("Color", color_frame)
-#                 cv2.imshow("Depth", depth_frame)
-#                 cv2.waitKey(1)
-#             except cv2.error as e:
-#                 print(f"Display error (but frames are OK): {e}")
-if __name__ == "__main__":
-    import open3d as o3d
-    CAMERA_SERIALS = {
-        "RealSense": {
-            'head': '153122070447',
-            'left_wrist': '427622270438',
-            'right_wrist': '427622270277',
-        }
-    }
-    camera1 = RealSenseCamera({"serial": "153122070447"})
-    if camera1.connect():
-        pipeline = camera1.pipeline
-        pc = rs.pointcloud()
-        frames = pipeline.wait_for_frames()
-        depth_frame = frames.get_depth_frame()
-        color_frame = frames.get_color_frame()
-        points = pc.calculate(depth_frame)
-        vtx = np.asanyarray(points.get_vertices()).view(np.float32).reshape(-1, 3)
-        # 构建Open3D点云
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(vtx)
-        o3d.visualization.draw_geometries([pcd], window_name='RealSense PointCloud')
-        camera1.disconnect()
