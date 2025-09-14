@@ -8,6 +8,7 @@ import uvicorn  # 导入uvicorn
 import sqlite3
 import os
 import json
+from contextlib import asynccontextmanager
 
 from Device.Camera.RealSenseCamera import RealSenseCamera
 from Device.Robot.RealMan import RM_controller
@@ -23,7 +24,7 @@ TELEOP_GROUPS = {}
 # 原因如下：
 # 1. 当使用uvicorn.run()运行FastAPI应用时，实际会启动一个独立的服务器进程
 # 2. 在这个进程中，只有被导入的模块会被执行，而if __name__ == "__main__"块中的代码不会被执行
-# 3. @app.on_event("startup")装饰器确保在FastAPI应用实际启动并准备处理请求之前执行初始化代码
+# 3. lifespan事件处理器确保在FastAPI应用实际启动并准备处理请求之前执行初始化代码
 # 4. 这样可以确保在所有API路由中都能访问到正确初始化的device_pool
 device_pool = {}
 
@@ -123,7 +124,7 @@ class Device(DeviceBase):
     id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class DeviceStatusResponse(BaseModel):
     conn_status: int
@@ -145,19 +146,23 @@ class TeleopGroupResponse(TeleopGroupBase):
     running: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class MessageResponse(BaseModel):
     message: str
 
-app = FastAPI()
 
-# 在应用启动时初始化设备池
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 在应用启动时初始化设备池
     init_device_tables(DB_PATH)
     init_device_pool()
     print("FastAPI应用启动，设备池内容:", {k: list(v.keys()) for k, v in device_pool.items()})
+    yield
+    # 应用关闭时的清理代码可以放在这里
+    print("FastAPI应用正在关闭...")
+
+app = FastAPI(lifespan=lifespan)
 
 DB_PATH = "teleop_data.db"
 

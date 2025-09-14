@@ -46,6 +46,10 @@ class RM_controller(Robot):
         self.gripper_close = False
         self.delta = [0, 0, 0 , 0 , 0 , 0]
         
+        # 如果提供了配置，则设置配置
+        if config:
+            self.set_config(config)
+        
         
     def set_config(self, config):
         """

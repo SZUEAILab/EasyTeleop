@@ -31,7 +31,7 @@ if __name__ == '__main__':
         # 启动遥操作
         vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
         
-        teleop = Teleoperation()
+        teleop = TeleopMiddleware()
         # 注册回调函数
         teleop.on("leftGripDown",l_arm.start_control)
         teleop.on("leftGripUp",l_arm.stop_control)
