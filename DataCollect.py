@@ -3,15 +3,19 @@ import queue
 import time
 import cv2
 import os
+import csv
 
 class DataCollect:
-    def __init__(self, video_dir="datasets/video", state_file="datasets/robot_states.txt"):
+    def __init__(self, save_dir="datasets/temp"):
         self.video_queue = queue.Queue()
         self.state_queue = queue.Queue()
         self.running = False
-        self.video_dir = video_dir
-        self.state_file = state_file
-        os.makedirs(self.video_dir, exist_ok=True)
+        self.save_dir = save_dir
+        self.capture_state = 0  # 0: not capturing, 1: capturing
+        self.session_timestamp = None
+        self.state_file = None
+        self.video_dir = None
+        os.makedirs(self.save_dir, exist_ok=True)
         self.video_consumer_thread = None
         self.state_consumer_thread = None
 
@@ -26,6 +30,38 @@ class DataCollect:
         if ts is None:
             ts = time.time()
         self.state_queue.put((ts, state))
+
+    def set_capture_state(self, state) -> bool:
+        """设置采集状态"""
+        if self.capture_state == state: return False
+        self.toggle_capture_state()
+        return True
+
+    def get_capture_state(self):
+        """获取采集状态"""
+        return self.capture_state
+
+    def toggle_capture_state(self):
+        """切换采集状态"""
+        if self.capture_state == 0:
+            self._start_new_session()
+            self.capture_state = 1
+        else:
+            self.capture_state = 0
+
+    def _start_new_session(self):
+        """开始新的采集会话，创建时间戳文件夹"""
+        self.session_timestamp = time.strftime("%Y%m%d_%H%M%S")
+        session_dir = os.path.join(self.save_dir, self.session_timestamp)
+        self.video_dir = os.path.join(session_dir, "frames")
+        self.state_file = os.path.join(session_dir, "states.csv")
+        
+        os.makedirs(self.video_dir, exist_ok=True)
+        
+        # Create CSV file with header
+        with open(self.state_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["timestamp", "state"])
 
     def start(self):
         """启动消费线程"""
@@ -50,8 +86,10 @@ class DataCollect:
         while self.running:
             try:
                 ts, frame = self.video_queue.get(timeout=0.1)
-                filename = os.path.join(self.video_dir, f"frame_{ts:.3f}.jpg")
-                cv2.imwrite(filename, frame)
+                # Check capture state before saving
+                if self.capture_state == 1 and self.video_dir:
+                    filename = os.path.join(self.video_dir, f"frame_{ts:.3f}.jpg")
+                    cv2.imwrite(filename, frame)
                 self.video_queue.task_done()
             except queue.Empty:
                 pass
@@ -61,8 +99,11 @@ class DataCollect:
         while self.running:
             try:
                 ts, state = self.state_queue.get(timeout=0.1)
-                with open(self.state_file, "a", encoding="utf-8") as f:
-                    f.write(f"{ts:.3f}: {state}\n")
+                # Check capture state before saving
+                if self.capture_state == 1 and self.state_file:
+                    with open(self.state_file, "a", newline="", encoding="utf-8") as f:
+                        writer = csv.writer(f)
+                        writer.writerow([f"{ts:.3f}", str(state)])
                 self.state_queue.task_done()
             except queue.Empty:
                 pass

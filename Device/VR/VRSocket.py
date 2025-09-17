@@ -23,6 +23,9 @@ class VRSocket(BaseDevice):
         # 设置事件回调
         self._events = {
              "message": self._default_callback,
+             "connect": self._default_connect_callback,
+             "disconnect": self._default_disconnect_callback,
+             "error": self._default_error_callback
         }
         
         # 如果提供了配置，则设置配置
@@ -46,6 +49,22 @@ class VRSocket(BaseDevice):
         
         return True
 
+    def _default_callback(self, data):
+        """默认消息回调"""
+        print(f"[VR消息]: {data}")
+
+    def _default_connect_callback(self):
+        """默认连接回调"""
+        print(f"[VR连接]: 已连接到 Unity 服务器 {self.ip}:{self.port}")
+
+    def _default_disconnect_callback(self, msg=""):
+        """默认断开连接回调"""
+        print(f"[VR断开连接]: {msg}")
+
+    def _default_error_callback(self, error_msg):
+        """默认错误回调"""
+        print(f"[VR错误]: {error_msg}")
+
     def connect(self):
         """
         建立到VR设备的Socket连接
@@ -54,10 +73,10 @@ class VRSocket(BaseDevice):
         try:
             self.sock.connect((self.ip, self.port))
             self.set_conn_status(1)
-            self.emit("connect", f"已连接到 Unity 服务器 {self.ip}:{self.port}")
+            self.emit("connect")
         except Exception as e:
             self.set_conn_status(2)
-            self.emit("error_occurred", f"连接失败: {e}")
+            self.emit("error", f"连接失败: {e}")
 
     def socket_receiver(self):
         """
@@ -84,11 +103,11 @@ class VRSocket(BaseDevice):
                         msg = json.loads(line)
                         self.emit("message", msg)
                     except json.JSONDecodeError as e:
-                        self.emit("error_occurred", f"[JSON解析失败]: {e}")
+                        self.emit("error", f"[JSON解析失败]: {e}")
                         break
             except Exception as e:
                 if self.get_conn_status() == 1:  # 只有在连接状态时才报告异常
-                    self.emit("error_occurred", f"Socket接收异常: {e}")
+                    self.emit("error", f"Socket接收异常: {e}")
                     self.set_conn_status(2)
                 break
 
@@ -106,7 +125,7 @@ class VRSocket(BaseDevice):
                 return True
             return False
         except Exception as e:
-            self.emit("error_occurred", f"启动失败: {e}")
+            self.emit("error", f"启动失败: {e}")
             return False
 
     def stop(self):
@@ -122,5 +141,5 @@ class VRSocket(BaseDevice):
             self.set_conn_status(0)  # 设置为未连接状态
             return True
         except Exception as e:
-            self.emit("error_occurred", f"停止设备时出错: {e}")
+            self.emit("error", f"停止设备时出错: {e}")
             return False

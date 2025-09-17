@@ -3,7 +3,7 @@ from Device.VR.VRSocket import VRSocket
 from Device.Robot.RealMan import RM_controller
 from DataCollect import DataCollect
 from Device.Camera.RealSenseCamera import RealSenseCamera
-import cv2
+import time
 
 if __name__ == '__main__':
     try:
@@ -12,23 +12,22 @@ if __name__ == '__main__':
         r_arm = RM_controller({"ip": "192.168.0.19", "port": 8080})
         vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
         teleop = TeleopMiddleware()
-        camera1 = RealSenseCamera({"serial":"153122070447"})        
+        camera1 = RealSenseCamera({"serial":"153122070447"}) 
+        
+        devices = [l_arm, r_arm, vrsocket, camera1]
 
-        def print_frame(frame):
-            dc.put_video_frame(frame)
+
         
         camera1.on("frame", dc.put_video_frame)
-        def print_left_arm_state(state):
-            dc.put_robot_state(state)
-            # print(f"Left Arm State: {state}")
-
-        l_arm.on("state", print_left_arm_state)
+        l_arm.on("state", dc.put_robot_state)
         
         # 注册回调函数
         teleop.on("leftGripDown",l_arm.start_control)
         teleop.on("leftGripUp",l_arm.stop_control)
-        teleop.on("rightGripDown",r_arm.start_control)
-        teleop.on("rightGripUp",r_arm.stop_control)
+        # teleop.on("rightGripDown",r_arm.start_control)
+        # teleop.on("rightGripUp",r_arm.stop_control)
+        
+        teleop.on("buttonATurnDown",dc.toggle_capture_state)
         
         #注册回调函数
         vrsocket.on("message",teleop.handle_socket_data)
@@ -36,11 +35,13 @@ if __name__ == '__main__':
         dc.start()
         camera1.start()
         l_arm.start()
-        r_arm.start()
+        # r_arm.start()
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响
         
         while(1):
-            pass
+            connect_states = [device.get_conn_status() for device in devices]
+            print(f"设备连接状态: {connect_states}")
+            time.sleep(1)
     except Exception as e:
         print(f"初始化失败: {e}")
         exit(1)
