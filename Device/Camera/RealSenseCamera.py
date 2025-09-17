@@ -24,7 +24,6 @@ class RealSenseCamera(BaseDevice):
         self.target_fps = 30  # 目标帧率
         self.min_interval = 1.0 / self.target_fps  # 最小间隔时间
         self.polling_thread = None
-        self.polling_running = False
         self.pipeline = None    # 存储pipeline对象
         self.rsconfig = rs.config()  
         
@@ -53,9 +52,15 @@ class RealSenseCamera(BaseDevice):
         return True
 
     def start(self):
-        self.connect()
-        print("Camera connect")
-        self.start_polling()
+        try:
+            self.set_conn_status(2)
+            if self.polling_thread is None or not self.polling_thread.is_alive():
+                self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
+                self.polling_thread.start()
+                return True
+            return False
+        except Exception as e:
+            print(f"Failed to start robot arm: {e}")
 
     def connect(self) -> bool:
         """连接RealSense摄像头"""
@@ -67,11 +72,9 @@ class RealSenseCamera(BaseDevice):
             profile = self.pipeline.start(self.rsconfig)
             device = profile.get_device()
             device.hardware_reset()
-            self.set_conn_status(1)
             print(f"connected successfully")
             return True
         except Exception as e:
-            self.set_conn_status(2)
             print(f"connect failed: {str(e)}")
             return False
 
@@ -81,63 +84,41 @@ class RealSenseCamera(BaseDevice):
             if self.pipeline:
                 self.pipeline.stop()
                 self.pipeline = None
-            self.set_conn_status(2)
             print(f"disconnected successfully")
             return True
         except Exception as e:
-            self.set_conn_status(2)
             print(f"disconnect failed: {str(e)}")
             return False
 
-    def start_polling(self):
-        """启动状态轮询线程"""
-        if not self.polling_running:
-            self.polling_running = True
-            self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
-            self.polling_thread.start()
-
-    def stop_polling(self):
-        """停止状态轮询线程"""
-        self.polling_running = False
-        if self.polling_thread is not None:
-            self.polling_thread.join()
-            self.polling_thread = None
-
     def _poll_state(self):
         last_time = time.time()
-        while self.polling_running:
-            try:
-                color_frame, depth_frame = self.get_frames()
-                self.emit("frame",color_frame)
+        while self.get_conn_status():
+            if self.get_conn_status() ==  1:
+                try:
+                    color_frame, depth_frame = self.get_frames()
+                    self.emit("frame",color_frame)
+                    # 帧率控制，而不是固定间隔
+                    current_time = time.time()
+                    elapsed = current_time - last_time
+                    if elapsed < self.min_interval:
+                        time.sleep(self.min_interval - elapsed)
+                    last_time = time.time()
+                except Exception as e:
+                    print(f"Error polling camera frames: {str(e)}")
+                    self.set_conn_status(2)
+                    continue
+            else:
+                try:
+                    if self.connect():
+                        print("Camera reconnected")
+                        self.set_conn_status(1)
+                except Exception as e:
+                    time.sleep(self.reconnect_interval)
                 
-            except Exception as e:
-                print(f"Error polling robot state: {str(e)}")
-                break
-            
-            # 帧率控制，而不是固定间隔
-            current_time = time.time()
-            elapsed = current_time - last_time
-            if elapsed < self.min_interval:
-                time.sleep(self.min_interval - elapsed)
-            last_time = time.time()
-
-    def is_connected(self) -> bool:
-        """检查RealSense摄像头是否连接"""
-        return self.pipeline is not None
-
-    def get_device_info(self) -> Dict[str, Any]:
-        """获取RealSense摄像头信息"""
-        if self.is_connected():
-            return {
-                "serial": self.camera_serial,
-                "type": self.camera_type,
-                "position": self.camera_position
-            }
-        return None
 
     def get_frames(self) -> Tuple[np.ndarray, np.ndarray]:
         """获取RealSense摄像头帧(RGB, Depth)"""
-        if not self.is_connected():
+        if self.get_conn_status() == 2:
             print("not connected")
             return None, None
         
@@ -151,8 +132,11 @@ class RealSenseCamera(BaseDevice):
 
     def stop(self):
         """停止设备"""
-        self.stop_polling()
-        self.disconnect()
-
+        self.set_conn_status(0)
+        # self.disconnect()
+        if self.polling_thread is not None:
+            self.polling_thread.join()
+            self.polling_thread = None
+        
     def __del__(self):
         self.stop()

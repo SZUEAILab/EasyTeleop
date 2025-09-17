@@ -16,6 +16,8 @@ class BaseDevice(ABC):
         self._events: Dict[str, Callable] = {}
         # 连接状态: 0=未连接(灰色), 1=已连接(绿色), 2=断开连接,需要实现重连机制(红色)
         self._conn_status: int = 0
+        # 重连(state 2 -> state 1的尝试)间隔秒数
+        self.reconnect_interval = 1  
 
     def on(self, event_name: str, callback: Callable) -> bool:
         """

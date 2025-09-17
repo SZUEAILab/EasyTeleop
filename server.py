@@ -1,5 +1,6 @@
 import yaml
 from fastapi import FastAPI, HTTPException, Body, status
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from typing import Optional, List, Dict
@@ -29,6 +30,15 @@ TELEOP_GROUPS = {}
 device_pool = {}
 
 
+def parse_device_id(device_id):
+    """Helper function to parse device ID from config"""
+    if device_id is None:
+        return None
+    if isinstance(device_id, str) and device_id.isdigit():
+        return int(device_id)
+    return device_id if isinstance(device_id, int) else None
+
+
 class TeleopGroup:
     def __init__(self, group_id, config):
         self.id = group_id
@@ -44,48 +54,36 @@ class TeleopGroup:
         self.camera3 = None
 
     def start(self, device_pool):
-        print("TeleopGroup.start中设备池内容:", {k: list(v.keys()) for k, v in device_pool.items()})
+        print("TeleopGroup.start中设备池内容:", list(device_pool.keys()))
         # 按照配置引用device_pool
         self.teleop = TeleopMiddleware()
         print(self.config)
         # 左手臂
-        left_id = self.config.get('left_arm_id')
-        if isinstance(left_id, str) and left_id.isdigit():
-            left_id = int(left_id)
-        self.left_arm = device_pool['robot'].get(left_id) if left_id else None
+        left_id = parse_device_id(self.config.get('left_arm_id'))
+        self.left_arm = device_pool.get(left_id) if left_id else None
         if self.left_arm:
             self.teleop.on("leftGripDown", self.left_arm.start_control)
             self.teleop.on("leftGripUp", self.left_arm.stop_control)
         # 右手臂
-        right_id = self.config.get('right_arm_id')
-        if isinstance(right_id, str) and right_id.isdigit():
-            right_id = int(right_id)
-        self.right_arm = device_pool['robot'].get(right_id) if right_id else None
+        right_id = parse_device_id(self.config.get('right_arm_id'))
+        self.right_arm = device_pool.get(right_id) if right_id else None
         if self.right_arm:
             self.teleop.on("rightGripDown", self.right_arm.start_control)
             self.teleop.on("rightGripUp", self.right_arm.stop_control)
         # VR头显
-        vr_id = self.config.get('vr_id')
-        if isinstance(vr_id, str) and vr_id.isdigit():
-            vr_id = int(vr_id)
-        self.vr = device_pool['vr'].get(vr_id) if vr_id else None
+        vr_id = parse_device_id(self.config.get('vr_id'))
+        self.vr = device_pool.get(vr_id) if vr_id else None
         if self.vr:
             self.vr.on("message",self.teleop.handle_socket_data)
         # 摄像头（可选）
-        camera1_id = self.config.get('camera1_id')
-        if isinstance(camera1_id, str) and camera1_id.isdigit():
-            camera1_id = int(camera1_id)
-        self.camera1 = device_pool['camera'].get(camera1_id) if camera1_id else None
+        camera1_id = parse_device_id(self.config.get('camera1_id'))
+        self.camera1 = device_pool.get(camera1_id) if camera1_id else None
         
-        camera2_id = self.config.get('camera2_id')
-        if isinstance(camera2_id, str) and camera2_id.isdigit():
-            camera2_id = int(camera2_id)
-        self.camera2 = device_pool['camera'].get(camera2_id) if camera2_id else None
+        camera2_id = parse_device_id(self.config.get('camera2_id'))
+        self.camera2 = device_pool.get(camera2_id) if camera2_id else None
         
-        camera3_id = self.config.get('camera3_id')
-        if isinstance(camera3_id, str) and camera3_id.isdigit():
-            camera3_id = int(camera3_id)
-        self.camera3 = device_pool['camera'].get(camera3_id) if camera3_id else None
+        camera3_id = parse_device_id(self.config.get('camera3_id'))
+        self.camera3 = device_pool.get(camera3_id) if camera3_id else None
         
         self.running = True
 
@@ -220,7 +218,7 @@ async def lifespan(app: FastAPI):
     init_device_tables(DB_PATH)
     init_device_pool()
     init_teleop_groups()
-    print("FastAPI应用启动，设备池内容:", {k: list(v.keys()) for k, v in device_pool.items()})
+    print("FastAPI应用启动，设备池内容:", list(device_pool.keys()))
     print("FastAPI应用启动，遥操作组内容:", list(TELEOP_GROUPS.keys()))
     yield
     # 应用关闭时的清理代码可以放在这里
@@ -246,7 +244,7 @@ DEVICE_CONFIG = {
 # Initialize device pool based on database records
 def init_device_pool():
     global device_pool
-    device_pool = {category: {} for category in DEVICE_CONFIG}
+    device_pool = {}  # Flat structure with unique IDs as keys
     
     conn = get_db_conn()
     cursor = conn.cursor()
@@ -262,9 +260,10 @@ def init_device_pool():
                 if type_ in DEVICE_CONFIG[category]:
                     device_class = DEVICE_CONFIG[category][type_]
                     device_instance = device_class(config)
-                    device_pool[category][id] = device_instance
+                    # Store device instance with ID as direct key
+                    device_pool[id] = device_instance
             except Exception as e:
-                print(f"Failed to initialize device {id} of type {type_}: {e}")
+                print(f"Error creating device instance: id={id}, type={type_}, error={e}")
     
     conn.close()
 
@@ -435,22 +434,19 @@ def start_device(category: str, id: int):
     obj = DEVICE_CONFIG[category][type_](config)
     if obj and hasattr(obj, 'start'):
         obj.start()
-    # 确保 category 存在于 device_pool 中
-    if category not in device_pool:
-        device_pool[category] = {}
-    device_pool[category][id] = obj
+    # Store in device_pool with ID as direct key
+    device_pool[id] = obj
     return MessageResponse(message="设备已启动")
 
 # 4. 停止并删除设备对象
 @app.post("/api/devices/{category}/{id}/stop", response_model=MessageResponse)
 def stop_device(category: str, id: int):
-    pool = device_pool.get(category, {})
-    if id not in pool:
+    if id not in device_pool:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备未启动")
-    obj = pool[id]
+    obj = device_pool[id]
     if hasattr(obj, 'stop'):
         obj.stop()
-    del pool[id]
+    del device_pool[id]
     return MessageResponse(message="设备已停止并删除")
 
 
@@ -468,18 +464,17 @@ def delete_device(category: str, id: int):
     conn.commit()
     conn.close()
     # 同时从设备池移除对象（如果有）
-    if category in device_pool and id in device_pool[category]:
-        del device_pool[category][id]
+    if id in device_pool:
+        del device_pool[id]
     return None
 
 # 获取设备连接状态
 @app.get("/api/devices/{category}/{id}/status", response_model=DeviceStatusResponse)
 def get_device_conn_status(category: str, id: int):
-    pool = device_pool.get(category, {})
-    if id not in pool:
+    if id not in device_pool:
         status = 0  # 未连接
     else:
-        device = pool[id]
+        device = device_pool[id]
         if hasattr(device, 'get_conn_status'):
             status = device.get_conn_status()
         elif hasattr(device, 'is_connected'):
@@ -710,6 +705,10 @@ def stop_teleop_group(group_id: str):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
     group.stop()
     return MessageResponse(message="遥操作已停止")
+
+@app.get("/", response_class=RedirectResponse)
+async def root_redirect():
+    return "/index.html"
 
 app.mount("/", StaticFiles(directory="static"), name="index")
 

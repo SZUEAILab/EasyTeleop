@@ -42,7 +42,7 @@ class RM_controller(Robot):
         self.polling_thread = None
         self.state_lock = Lock()  # 用于线程安全访问状态变量
         
-        # 原有变量
+        # 控制相关变量
         self.is_controlling = False
         self.prev_tech_state = None
         self.arm_first_state = None
@@ -72,77 +72,93 @@ class RM_controller(Robot):
         return True
         
     def start(self):
-        try:
-            self.arm_controller = RoboticArm(self.thread_mode)
-            self.handle = self.arm_controller.rm_create_robot_arm(self.ip, self.port) 
-            if self.handle.id == -1:
-                raise ConnectionError(f"Failed to connect to robot arm at {self.ip}:{self.port}")
-            print(f"[Initialize]Robot arm connected at {self.ip}:{self.port}")
-        except Exception as e:
-            raise ConnectionError(f"Failed to initialize robot arm: {str(e)}")
-        # 启动轮询线程
-        self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
-        self.polling_thread.start()
-        self.set_conn_status(1)
-        print("[Initialize]Robot arm initialized and polling started.")
         
-        # 获取初始状态
         try:
-            # 获取手臂状态
-            succ, arm_state = self.arm_controller.rm_get_current_arm_state()
-            if not succ:
-                with self.state_lock:
-                    self.current_state = arm_state["pose"]
-            
-            # 获取夹爪状态
-            succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
-            if not succ_gripper:
-                with self.state_lock:
-                    self.current_gripper_state = gripper_state
-            
+            self.set_conn_status(2)
+            if self.polling_thread is None or not self.polling_thread.is_alive():
+                self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
+                self.polling_thread.start()
+                return True
+            return False
         except Exception as e:
-            self.stop_polling()
-            raise RuntimeError(f"Failed to get initial robot state: {str(e)}")
+            print(f"start failed: {str(e)}")
+        
+        
 
     def stop(self):
         """停止设备"""
+        self.set_conn_status(0)
         if self.polling_thread is not None:
             self.polling_thread.join()
             self.polling_thread = None
         self.arm_controller.rm_destroy_robot_arm(self.handle)
-        self.set_conn_status(0)
+        
         print("[Shutdown]Robot arm stopped and disconnected.")
         
         return True
 
     def _poll_state(self):
         last_time = time.time()
-        while True:
-            try:
-                succ, arm_state = self.arm_controller.rm_get_current_arm_state()
-                if not succ:
-                    
-                    with self.state_lock:
-                        self.current_state = arm_state["pose"]
-                        self.emit("state",self.current_state)#调用回调函数
-            
-                # 获取夹爪状态
-                succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
-                if not succ_gripper:
-                    with self.state_lock:
-                        self.current_gripper_state = gripper_state
+        while self.get_conn_status():
+            # print(f"[Polling]Robot arm is {'connected' if self.get_conn_status() == 1 else 'disconnected'}, polling state...")
+            if self.get_conn_status() ==  1:
+                try:
+                    succ, arm_state = self.arm_controller.rm_get_current_arm_state()
+                    if not succ:
+                        
+                        with self.state_lock:
+                            self.current_state = arm_state["pose"]
+                            self.emit("state",self.current_state)#调用回调函数
+                    else:
+                        raise RuntimeError("Failed to get arm state")
                 
-            except Exception as e:
-                print(f"Error polling robot state: {str(e)}")
-                break
-            
-            # 帧率控制，而不是固定间隔
-            current_time = time.time()
-            elapsed = current_time - last_time
-            if elapsed < self.min_interval:
-                time.sleep(self.min_interval - elapsed)
-            last_time = time.time()
+                    # 获取夹爪状态
+                    succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
+                    if not succ_gripper:
+                        with self.state_lock:
+                            self.current_gripper_state = gripper_state
+                    else:
+                        raise RuntimeError("Failed to get gripper state")
+                    # 帧率控制，而不是固定间隔
+                    current_time = time.time()
+                    elapsed = current_time - last_time
+                    if elapsed < self.min_interval:
+                        time.sleep(self.min_interval - elapsed)
+                    last_time = time.time()
+                except Exception as e:
+                    self.set_conn_status(2)
+                    print(f"Error polling robot state: {str(e)}")
+            else:
+                try:
+                    self.arm_controller = RoboticArm(self.thread_mode)
+                    self.handle = self.arm_controller.rm_create_robot_arm(self.ip, self.port) 
+                    if self.handle.id == -1:
+                        raise ConnectionError(f"Failed to connect to robot arm at {self.ip}:{self.port}")
+                    print(f"[Initialize]Robot arm connected at {self.ip}:{self.port}")
 
+                    # 获取手臂状态
+                    succ, arm_state = self.arm_controller.rm_get_current_arm_state()
+                    if not succ:
+                        with self.state_lock:
+                            self.current_state = arm_state["pose"]
+                    else:
+                        raise RuntimeError("Failed to get arm state")
+                    
+                    # 获取夹爪状态
+                    succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
+                    if not succ_gripper:
+                        with self.state_lock:
+                            self.current_gripper_state = gripper_state
+                    else:
+                        raise RuntimeError("Failed to get gripper state")
+                            
+                    self.set_conn_status(1)
+                    print("[Initialize]Robot arm initialized and polling started.")
+                    
+                except Exception as e:
+                    time.sleep(self.reconnect_interval)
+                
+                
     def get_state(self):
         """获取当前状态（线程安全）"""
         with self.state_lock:

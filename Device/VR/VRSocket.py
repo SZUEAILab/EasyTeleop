@@ -75,11 +75,11 @@ class VRSocket(BaseDevice):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.sock.connect((self.ip, self.port))
-            self.set_conn_status(1)
             self.emit("connect")
+            return True
         except Exception as e:
-            self.set_conn_status(2)
             self.emit("error", f"连接失败: {e}")
+            return False
 
     def socket_receiver(self):
         """
@@ -125,7 +125,8 @@ class VRSocket(BaseDevice):
             elif self.get_conn_status() == 2:
                 # 连接断开，尝试重新连接
                 try:
-                    self.connect()
+                    if self.connect():
+                        self.set_conn_status(1)
                 except Exception as e:
                     self.emit("error", f"重连尝试失败: {e}")
                     time.sleep(self.reconnect_interval)
