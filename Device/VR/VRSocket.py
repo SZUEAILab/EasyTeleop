@@ -1,6 +1,7 @@
 import socket
 import json
 import threading
+import time
 from ..BaseDevice import BaseDevice
 
 
@@ -19,6 +20,8 @@ class VRSocket(BaseDevice):
         self.port = None
         self.sock = None
         self.receiver_thread = None
+        self.monitor_thread = None
+        self.reconnect_interval = 1  # 重连间隔秒数
         
         # 设置事件回调
         self._events = {
@@ -111,17 +114,33 @@ class VRSocket(BaseDevice):
                     self.set_conn_status(2)
                 break
 
+    def connection_monitor(self):
+        """
+        连接监控线程：根据连接状态执行相应操作
+        """
+        while self.get_conn_status() in [1, 2]:  # 只要处于已连接或断开连接状态就继续监控
+            if self.get_conn_status() == 1:
+                # 连接状态正常，执行接收逻辑
+                self.socket_receiver()
+            elif self.get_conn_status() == 2:
+                # 连接断开，尝试重新连接
+                try:
+                    self.connect()
+                except Exception as e:
+                    self.emit("error", f"重连尝试失败: {e}")
+                    time.sleep(self.reconnect_interval)
+            time.sleep(0.1)  # 短暂休眠避免过度占用CPU
+
     def start(self):
         """
         启动设备
         :return: 是否启动成功
         """
         try:
-            self.connect()
-            if self.receiver_thread is None or not self.receiver_thread.is_alive():
-                self.receiver_thread = threading.Thread(target=self.socket_receiver, daemon=True)
-            if self.get_conn_status() == 1:  # 只有连接成功才启动线程
-                self.receiver_thread.start()
+            self.set_conn_status(2)
+            if self.monitor_thread is None or not self.monitor_thread.is_alive():
+                self.monitor_thread = threading.Thread(target=self.connection_monitor, daemon=True)
+                self.monitor_thread.start()
                 return True
             return False
         except Exception as e:
