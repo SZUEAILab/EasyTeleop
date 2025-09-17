@@ -20,7 +20,7 @@ class VRSocket(BaseDevice):
         self.port = None
         self.sock = None
         self.receiver_thread = None
-        self.monitor_thread = None
+        self.polling_thread = None
         self.reconnect_interval = 1  # 重连间隔秒数
         
         # 设置事件回调
@@ -51,11 +51,6 @@ class VRSocket(BaseDevice):
         self.port = int(config["port"])
         
         return True
-
-    def _default_callback(self, data):
-        """默认消息回调"""
-        print(f"[VR消息]: {data}")
-
     def _default_connect_callback(self):
         """默认连接回调"""
         print(f"[VR连接]: 已连接到 Unity 服务器 {self.ip}:{self.port}")
@@ -114,7 +109,7 @@ class VRSocket(BaseDevice):
                     self.set_conn_status(2)
                 break
 
-    def connection_monitor(self):
+    def _poll_state(self):
         """
         连接监控线程：根据连接状态执行相应操作
         """
@@ -139,9 +134,9 @@ class VRSocket(BaseDevice):
         """
         try:
             self.set_conn_status(2)
-            if self.monitor_thread is None or not self.monitor_thread.is_alive():
-                self.monitor_thread = threading.Thread(target=self.connection_monitor, daemon=True)
-                self.monitor_thread.start()
+            if self.polling_thread is None or not self.polling_thread.is_alive():
+                self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
+                self.polling_thread.start()
                 return True
             return False
         except Exception as e:
@@ -154,11 +149,13 @@ class VRSocket(BaseDevice):
         :return: 是否停止成功
         """
         try:
+            self.set_conn_status(0)  # 设置为未连接状态
+            if self.polling_thread is not None:
+                self.polling_thread.join()
+                self.polling_thread = None
             if self.sock:
                 self.sock.close()
                 self.sock = None
-                
-            self.set_conn_status(0)  # 设置为未连接状态
             return True
         except Exception as e:
             self.emit("error", f"停止设备时出错: {e}")

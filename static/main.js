@@ -144,6 +144,19 @@ async function renderTeleopGroups() {
     console.error('获取设备列表失败:', error);
   }
   
+  // 获取每个遥操作组的状态
+  const groupStatuses = {};
+  await Promise.all(groups.map(async (group) => {
+    try {
+      const res = await fetch(`/api/teleop-groups/${group.id}/status`);
+      const status = await res.json();
+      groupStatuses[group.id] = status;
+    } catch (error) {
+      console.error(`获取遥操作组 ${group.id} 状态失败:`, error);
+      groupStatuses[group.id] = { running: false, capture_state: 0 };
+    }
+  }));
+  
   function getDeviceName(category, deviceId) {
     if (!deviceId) return '无';
     const deviceList = devices[category] || [];
@@ -151,7 +164,12 @@ async function renderTeleopGroups() {
     return device ? `${device.type}#${device.id} - ${device.name}` : `未知设备#${deviceId}`;
   }
   
-  container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groups.map(group => `
+  container.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-4">${groups.map(group => {
+    const status = groupStatuses[group.id] || { running: false, capture_state: 0 };
+    const captureStateText = status.capture_state === 1 ? '采集中' : '未采集';
+    const captureStateColor = status.capture_state === 1 ? 'bg-green-500' : 'bg-gray-500';
+    
+    return `
     <div class="p-4 bg-white rounded shadow flex flex-col gap-2 border border-gray-200">
       <div class="font-bold text-blue-600">组ID: ${group.id}</div>
       <div class="font-medium">${group.name}</div>
@@ -160,14 +178,24 @@ async function renderTeleopGroups() {
       <div class="text-sm">右臂: ${getDeviceName('robot', group.right_arm_id)}</div>
       <div class="text-sm">头显: ${getDeviceName('vr', group.vr_id)}</div>
       <div class="text-sm">摄像头: ${getDeviceName('camera', group.camera1_id)} | ${getDeviceName('camera', group.camera2_id)} | ${getDeviceName('camera', group.camera3_id)}</div>
+      <div class="flex items-center gap-2 mt-2">
+        <span class="text-sm">运行状态:</span>
+        <span class="px-2 py-1 ${status.running ? 'bg-green-500' : 'bg-gray-500'} text-white rounded text-xs">
+          ${status.running ? '运行中' : '已停止'}
+        </span>
+        <span class="text-sm">采集状态:</span>
+        <span class="px-2 py-1 ${captureStateColor} text-white rounded text-xs">
+          ${captureStateText}
+        </span>
+      </div>
       <div class="flex gap-2 mt-2 flex-wrap">
         <button class="px-2 py-1 bg-yellow-400 text-white rounded hover:bg-yellow-500 text-sm" onclick='showTeleopModal(${JSON.stringify(group)})'>配置</button>
         <button class="px-2 py-1 bg-gray-500 text-white rounded hover:bg-gray-700 text-sm" onclick='deleteTeleopGroup("${group.id}")'>删除</button>
-        <button class="px-2 py-1 ${group.running ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded text-sm" onclick='${group.running ? `stopTeleopGroup("${group.id}")` : `startTeleopGroup("${group.id}")`}'>${group.running ? '停止' : '启动'}</button>
+        <button class="px-2 py-1 ${status.running ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'} text-white rounded text-sm" onclick='${status.running ? `stopTeleopGroup("${group.id}")` : `startTeleopGroup("${group.id}")`}'>${status.running ? '停止' : '启动'}</button>
       </div>
     </div>
-    
-  `).join('')}</div>
+    `;
+  }).join('')}</div>
   <div class="flex justify-start mt-4"><button id="addTeleopBtn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600" onclick='showTeleopModal()'>新建遥操作组</button></div>
   `;
 }

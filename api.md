@@ -169,7 +169,14 @@
 [
   { 
     "id": "group1", 
-    "config": {...}, 
+    "name": "主操作组",
+    "describe": "主操作组描述",
+    "left_arm_id": 1,
+    "right_arm_id": 2,
+    "vr_id": 3,
+    "camera1_id": 4,
+    "camera2_id": 5,
+    "camera3_id": 6,
     "running": true 
   }
 ]
@@ -182,11 +189,14 @@
 - 请求体（JSON）：
 ```json
 { 
-  "config": {
-    "left_arm": 1, 
-    "right_arm": 2, 
-    "vr": 3 
-  }
+  "name": "主操作组",
+  "describe": "主操作组描述",
+  "left_arm_id": 1,
+  "right_arm_id": 2,
+  "vr_id": 3,
+  "camera1_id": 4,
+  "camera2_id": 5,
+  "camera3_id": 6
 }
 ```
 - 返回（状态码：201 Created）：
@@ -201,7 +211,14 @@
 - 请求体（JSON）：
 ```json
 { 
-  "config": { ... } 
+  "name": "主操作组",
+  "describe": "主操作组描述",
+  "left_arm_id": 1,
+  "right_arm_id": 2,
+  "vr_id": 3,
+  "camera1_id": 4,
+  "camera2_id": 5,
+  "camera3_id": 6
 }
 ```
 - 返回：
@@ -219,15 +236,24 @@
 ```
 
 ### GET /api/teleop-groups/{group_id}
-- 描述：获取遥操作组详情。
+- 描述：获取遥操作组配置详情。
 - 路径参数：
   - group_id: 组ID
 - 返回：
 ```json
 { 
-  "id": "group1", 
-  "config": {...}, 
-  "running": true 
+  "id": "group1",
+  "name": "主操作组",
+  "describe": "主操作组描述",
+  "left_arm_id": 1,
+  "right_arm_id": 2,
+  "vr_id": 3,
+  "camera1_id": 4,
+  "camera2_id": 5,
+  "camera3_id": 6,
+  "created_at": "2025-01-01T00:00:00",
+  "updated_at": "2025-01-01T00:00:00",
+  "is_active": true
 }
 ```
 
@@ -248,6 +274,25 @@
 ```json
 { "message": "遥操作已停止" }
 ```
+
+### GET /api/teleop-groups/{group_id}/status
+- 描述：获取遥操作组运行状态和数据采集状态。
+- 路径参数：
+  - group_id: 组ID
+- 返回：
+```json
+{
+  "running": true,
+  "capture_state": 1
+}
+```
+- 字段说明：
+  - running: 遥操作组运行状态
+    - true: 运行中
+    - false: 已停止
+  - capture_state: 数据采集状态
+    - 0: 未采集
+    - 1: 采集中
 
 ---
 

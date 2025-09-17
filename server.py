@@ -16,6 +16,7 @@ from Device.Robot.RealMan import RM_controller
 from Device.VR.VRSocket import VRSocket
 
 from TeleopMiddleware import TeleopMiddleware
+from DataCollect import DataCollect
 
 # 遥操作组管理
 TELEOP_GROUPS = {}
@@ -43,7 +44,8 @@ class TeleopGroup:
     def __init__(self, group_id, config):
         self.id = group_id
         self.config = config
-        self.teleop = None
+        self.teleop = TeleopMiddleware()
+        self.data_collect = DataCollect()
         self.running = False
         # 设备引用
         self.left_arm = None
@@ -55,8 +57,10 @@ class TeleopGroup:
 
     def start(self, device_pool):
         print("TeleopGroup.start中设备池内容:", list(device_pool.keys()))
-        # 按照配置引用device_pool
-        self.teleop = TeleopMiddleware()
+        # 启动数据采集
+        self.data_collect.start()
+        self.teleop.on("buttonATurnDown", self.data_collect.toggle_capture_state)
+        # 按照配置引用device_pool中配置的设备
         print(self.config)
         # 左手臂
         left_id = parse_device_id(self.config.get('left_arm_id'))
@@ -64,12 +68,16 @@ class TeleopGroup:
         if self.left_arm:
             self.teleop.on("leftGripDown", self.left_arm.start_control)
             self.teleop.on("leftGripUp", self.left_arm.stop_control)
+            # 注册数据采集回调
+            self.left_arm.on("state", self.data_collect.put_robot_state)
         # 右手臂
         right_id = parse_device_id(self.config.get('right_arm_id'))
         self.right_arm = device_pool.get(right_id) if right_id else None
         if self.right_arm:
             self.teleop.on("rightGripDown", self.right_arm.start_control)
             self.teleop.on("rightGripUp", self.right_arm.stop_control)
+            # 注册数据采集回调
+            self.right_arm.on("state", self.data_collect.put_robot_state)
         # VR头显
         vr_id = parse_device_id(self.config.get('vr_id'))
         self.vr = device_pool.get(vr_id) if vr_id else None
@@ -78,25 +86,44 @@ class TeleopGroup:
         # 摄像头（可选）
         camera1_id = parse_device_id(self.config.get('camera1_id'))
         self.camera1 = device_pool.get(camera1_id) if camera1_id else None
+        if self.camera1:
+            # 注册数据采集回调
+            self.camera1.on("frame", self.data_collect.put_video_frame)
         
         camera2_id = parse_device_id(self.config.get('camera2_id'))
         self.camera2 = device_pool.get(camera2_id) if camera2_id else None
+        if self.camera2:
+            # 注册数据采集回调
+            self.camera2.on("frame", self.data_collect.put_video_frame)
         
         camera3_id = parse_device_id(self.config.get('camera3_id'))
         self.camera3 = device_pool.get(camera3_id) if camera3_id else None
+        if self.camera3:
+            # 注册数据采集回调
+            self.camera3.on("frame", self.data_collect.put_video_frame)
         
         self.running = True
 
     def stop(self):
+        # 停止数据采集
+        self.data_collect.stop()
         # 仅停止teleop逻辑，不操作设备
         if self.vr:
             self.vr.off("message")
         if self.left_arm:
             self.teleop.off("leftGripDown")
             self.teleop.off("leftGripUp")
+            self.left_arm.off("state")
         if self.right_arm:
             self.teleop.off("rightGripDown")
             self.teleop.off("rightGripUp")
+            self.right_arm.off("state")
+        if self.camera1:
+            self.camera1.off("frame")
+        if self.camera2:
+            self.camera2.off("frame")
+        if self.camera3:
+            self.camera3.off("frame")
         self.running = False
 
 
@@ -210,6 +237,11 @@ class TeleopGroupResponse(TeleopGroupBase):
 
 class MessageResponse(BaseModel):
     message: str
+
+
+class TeleopGroupStatusResponse(BaseModel):
+    running: bool
+    capture_state: int
 
 
 @asynccontextmanager
@@ -705,6 +737,21 @@ def stop_teleop_group(group_id: str):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
     group.stop()
     return MessageResponse(message="遥操作已停止")
+
+
+# 获取遥操作组状态
+@app.get("/api/teleop-groups/{group_id}/status", response_model=TeleopGroupStatusResponse)
+def get_teleop_group_status(group_id: str):
+    group = TELEOP_GROUPS.get(group_id)
+    if not group:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="遥操作组不存在")
+    
+    capture_state = group.data_collect.get_capture_state() if group.data_collect else 0
+    
+    return TeleopGroupStatusResponse(
+        running=group.running,
+        capture_state=capture_state
+    )
 
 @app.get("/", response_class=RedirectResponse)
 async def root_redirect():
