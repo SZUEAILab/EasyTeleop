@@ -1,8 +1,10 @@
-# EasyTeleop 遥操作管理平台 API 文档（卡片式设备管理）
+# EasyTeleop 遥操作管理平台 API 文档（REST风格）
+
+# 数据相关API
 
 ## 设备分类与列表
 
-### GET /api/device-categories
+### GET /api/device/categories
 - 描述：获取所有设备分类。
 - 返回：
 ```json
@@ -11,37 +13,9 @@
 }
 ```
 
-### GET /api/devices
-- 描述：获取所有设备列表（按类别分组）。
-- 返回：
-```json
-{
-  "vr": [{ "id": 1, "name": "Quest设备", "describe": "Quest VR设备", "type": "Quest", "config": {...} }],
-  "robot": [{ "id": 2, "name": "RealMan机械臂", "describe": "RealMan机器人", "type": "RealMan", "config": {...} }],
-  "camera": [{ "id": 3, "name": "RealSense相机", "describe": "RealSense深度相机", "type": "RealSense", "config": {...} }]
-}
-```
-
-### GET /api/devices/{category}
-- 描述：获取指定类别的设备列表。
-- 路径参数：
-  - category: "vr" | "robot" | "camera"
-- 返回：
-```json
-[
-  { 
-    "id": 3, 
-    "name": "RealSense相机", 
-    "describe": "RealSense深度相机", 
-    "type": "RealSense", 
-    "config": {...} 
-  }
-]
-```
-
-### GET /api/device-types/{category}
+### GET /api/device/types
 - 描述：获取设备类型及对应配置字段。
-- 路径参数：
+- 查询参数：
   - category: "vr" | "robot" | "camera"
 - 返回：
 ```json
@@ -52,19 +26,47 @@
 }
 ```
 
+### GET /api/devices
+- 描述：获取所有设备列表。
+- 查询参数（可选）：
+  - category: "vr" | "robot" | "camera"
+- 返回：
+```json
+[
+  { "id": 1, "name": "Quest设备", "describe": "Quest VR设备","category":"vr", "type": "Quest", "config": {...} },
+  { "id": 2, "name": "RealMan机械臂", "describe": "RealMan机器人","category":"robot", "type": "RealMan", "config": {...} },
+  { "id": 3, "name": "RealSense相机", "describe": "RealSense深度相机","category":"camera", "type": "RealSense", "config": {...} }
+]
+```
+
 ---
 
 ## 设备添加与配置
 
-### POST /api/devices/{category}
-- 描述：新增设备（添加卡片）。
+### GET /api/devices/{id}
+- 描述：获取单个设备详情。
 - 路径参数：
-  - category: "vr" | "robot" | "camera"
+  - id: 设备ID
+- 返回：
+```json
+{ 
+  "id": 3, 
+  "name": "RealSense相机", 
+  "describe": "RealSense深度相机", 
+  "category": "camera",
+  "type": "RealSense", 
+  "config": {...} 
+}
+```
+
+### POST /api/devices
+- 描述：新增设备。
 - 请求体（JSON）：
 ```json
 {
   "name": "设备名称",
   "describe": "设备描述",
+  "category": "vr" | "robot" | "camera",
   "type": "RealSense",
   "config": {
     "camera_type": "RealSense",
@@ -78,15 +80,22 @@
 { "message": "设备已添加" }
 ```
 
-### PUT /api/devices/{category}/{id}
-- 描述：修改设备配置（卡片内配置按钮）。
+### PUT /api/devices/{id}
+- 描述：修改设备配置。
 - 路径参数：
-  - category: "vr" | "robot" | "camera"
   - id: 设备ID
 - 请求体（JSON）：
 ```json
-{ 
-  "config": { ... } 
+{
+  "name": "设备名称",
+  "describe": "设备描述",
+  "category": "vr" | "robot" | "camera",
+  "type": "RealSense",
+  "config": {
+    "camera_type": "RealSense",
+    "camera_position": "left_wrist",
+    "camera_serial": "427622270438"
+  }
 }
 ```
 - 返回：
@@ -94,68 +103,13 @@
 { "message": "配置已更新" }
 ```
 
----
-
-## 设备启动与停止
-
-### POST /api/devices/{category}/{id}/start
-- 描述：启动设备（卡片内开始按钮）。
-- 路径参数：
-  - category: "vr" | "robot" | "camera"
-  - id: 设备ID
-- 返回：
-```json
-{ "message": "设备已启动" }
-```
-
-### POST /api/devices/{category}/{id}/stop
-- 描述：停止设备（卡片内结束按钮）。
-- 路径参数：
-  - category: "vr" | "robot" | "camera"
-  - id: 设备ID
-- 返回：
-```json
-{ "message": "设备已停止并删除" }
-```
-
-### DELETE /api/devices/{category}/{id}
+### DELETE /api/devices/{id}
 - 描述：彻底删除设备（从数据库移除）。
 - 路径参数：
-  - category: "vr" | "robot" | "camera"
   - id: 设备ID
 - 返回（状态码：204 No Content）：
 ```json
 无返回内容
-```
-
-### GET /api/devices/{category}/{id}/status
-- 描述：获取设备连接状态（前端可轮询）。
-- 路径参数：
-  - category: "vr" | "robot" | "camera"
-  - id: 设备ID
-- 返回：
-```json
-{ "conn_status": 0 }
-```
-- 状态码说明：
-  - 0: 未连接
-  - 1: 已连接
-  - 2: 断开/异常
-
-### GET /api/devices/{category}/{id}
-- 描述：获取单个设备详情。
-- 路径参数：
-  - category: "vr" | "robot" | "camera"
-  - id: 设备ID
-- 返回：
-```json
-{ 
-  "id": 3, 
-  "name": "RealSense相机", 
-  "describe": "RealSense深度相机", 
-  "type": "RealSense", 
-  "config": {...} 
-}
 ```
 
 ---
@@ -182,13 +136,12 @@
 ]
 ```
 
-### POST /api/teleop-groups/{group_id}
+### POST /api/teleop-groups
 - 描述：创建遥操作组。
-- 路径参数：
-  - group_id: 组ID
 - 请求体（JSON）：
 ```json
 { 
+  "id": "group1",
   "name": "主操作组",
   "describe": "主操作组描述",
   "left_arm_id": 1,
@@ -257,6 +210,44 @@
 }
 ```
 
+# 控制逻辑相关
+
+## 设备启动与停止
+
+<p style = "color:red">注意下方设备的启动和停止接口考虑删除，请尽量不要使用</p>
+
+### ~~POST /api/devices/{id}/start~~
+
+- 描述：启动设备。
+- 路径参数：
+  - id: 设备ID
+- 返回：
+```json
+{ "message": "设备已启动" }
+```
+
+### ~~POST /api/devices/{id}/stop~~
+- 描述：停止设备。
+- 路径参数：
+  - id: 设备ID
+- 返回：
+```json
+{ "message": "设备已停止并删除" }
+```
+
+### GET /api/devices/{id}/status
+- 描述：获取设备连接状态（前端可轮询）。
+- 路径参数：
+  - id: 设备ID
+- 返回：
+```json
+{ "conn_status": 0 }
+```
+- 状态码说明：
+  - 0: 未连接
+  - 1: 已连接
+  - 2: 断开/异常
+
 ### POST /api/teleop-groups/{group_id}/start
 - 描述：启动遥操作组。
 - 路径参数：
@@ -296,7 +287,7 @@
 
 ---
 
-## 说明
+# 说明
 - 所有设备均以卡片形式展示，支持动态添加、配置、启动、停止。
 - 推荐使用 application/json。
 - 设备配置字段请参考各设备类型说明。

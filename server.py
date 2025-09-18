@@ -182,17 +182,21 @@ def get_db_conn():
 class DeviceBase(BaseModel):
     name: str
     describe: str
+    category: str
     type: str
     config: dict
 
 class DeviceCreate(DeviceBase):
+    category: str
     pass
 
 class DeviceUpdate(BaseModel):
     config: dict
+    category: Optional[str] = None
 
 class Device(DeviceBase):
     id: int
+    category: str
 
     class Config:
         from_attributes = True
@@ -323,36 +327,31 @@ def init_teleop_groups():
         TELEOP_GROUPS[group_id] = TeleopGroup(group_id, config)
 
 # 1. 获取所有设备 type+config
-@app.get("/api/devices", response_model=Dict[str, List[Device]])
-def get_all_devices():
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    result = {}
-    for key in DEVICE_CONFIG:
-        cursor.execute(f"SELECT id,name,describe, type, config FROM devices WHERE category=?", (key,))
-        rows = cursor.fetchall()
-        for r in rows:
-            if key not in result:
-                result[key] = []
-            result[key].append({"id": r[0],"name":r[1],"describe":r[2], "type": r[3], "config": json.loads(r[4])})
-    conn.close()
-    return result
-
-@app.get("/api/devices/{category}", response_model=List[Device])
-def get_all_devices_category(category:str):
+@app.get("/api/devices", response_model=List[Device])
+def get_all_devices(category: Optional[str] = None):
     conn = get_db_conn()
     cursor = conn.cursor()
     result = []
-    cursor.execute("SELECT id,name,describe, type, config FROM devices WHERE category=?", (category,))
-    rows = cursor.fetchall()
-    for r in rows:
-        result.append({"id": r[0],"name":r[1],"describe":r[2], "type": r[3], "config": json.loads(r[4])})
+    
+    # 如果提供了category参数，则只查询该类别的设备
+    if category:
+        cursor.execute("SELECT id,name,describe,category,type,config FROM devices WHERE category=?", (category,))
+        rows = cursor.fetchall()
+        for r in rows:
+            result.append({"id": r[0], "name": r[1], "describe": r[2], "category": r[3], "type": r[4], "config": json.loads(r[5])})
+    else:
+        # 否则查询所有设备
+        cursor.execute("SELECT id,name,describe,category,type,config FROM devices")
+        rows = cursor.fetchall()
+        for r in rows:
+            result.append({"id": r[0], "name": r[1], "describe": r[2], "category": r[3], "type": r[4], "config": json.loads(r[5])})
+            
     conn.close()
     return result
 
 
 # 获取适配类型及config字段
-@app.get("/api/device-types/{category}")
+@app.get("/api/device/types")
 def get_adapted_types(category: str):
     if category not in DEVICE_CONFIG:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类别错误")
@@ -371,12 +370,14 @@ def get_adapted_types(category: str):
     return result
 
 # 新增设备（卡片添加）
-@app.post("/api/devices/{category}", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
-def add_device(category: str, device: DeviceCreate):
+@app.post("/api/devices", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
+def add_device(device: DeviceCreate):
     type_ = device.type
     config = device.config
     name = device.name
     describe = device.describe
+    category = device.category
+    
     # 只允许选择已适配类型
     if category not in DEVICE_CONFIG or type_ not in DEVICE_CONFIG[category]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"类型 {type_} 未适配于 {category}")
@@ -399,37 +400,43 @@ def add_device(category: str, device: DeviceCreate):
     return MessageResponse(message="设备已添加")
 
 # 获取单个设备详情
-@app.get("/api/devices/{category}/{id}", response_model=Device)
-def get_device(category: str, id: int):
+@app.get("/api/devices/{id}", response_model=Device)
+def get_device(id: int):
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, describe, type, config FROM devices WHERE id=?", (id,))
+    cursor.execute("SELECT id, name, describe, category, type, config FROM devices WHERE id=?", (id,))
     row = cursor.fetchone()
     conn.close()
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备不存在")
-    return Device(id=row[0], name=row[1], describe=row[2], type=row[3], config=json.loads(row[4]))
+    return Device(id=row[0], name=row[1], describe=row[2], category=row[3], type=row[4], config=json.loads(row[5]))
 
 
 # 2. 修改某个设备 config
-@app.put("/api/devices/{category}/{id}", response_model=MessageResponse)
-def update_device_config(category: str, id: int, device_update: DeviceUpdate):
+@app.put("/api/devices/{id}", response_model=MessageResponse)
+def update_device_config(id: int, device_update: DeviceUpdate):
     config = device_update.config
+    category = device_update.category
     # 获取设备类型
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT type FROM devices WHERE id=?", (id,))
+    cursor.execute("SELECT type, category FROM devices WHERE id=?", (id,))
     row = cursor.fetchone()
     if not row:
         conn.close()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备不存在")
     type_ = row[0]
+    orig_category = row[1]
+    
+    # 如果提供了新的category，则使用新的，否则使用原来的
+    device_category = category if category else orig_category
+    
     # 只允许选择已适配类型
-    if category not in DEVICE_CONFIG or type_ not in DEVICE_CONFIG[category]:
+    if device_category not in DEVICE_CONFIG or type_ not in DEVICE_CONFIG[device_category]:
         conn.close()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"类型 {type_} 未适配于 {category}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"类型 {type_} 未适配于 {device_category}")
     # 检查config字段
-    device_class = DEVICE_CONFIG[category][type_]
+    device_class = DEVICE_CONFIG[device_category][type_]
     # 使用类方法获取所需配置字段
     if hasattr(device_class, 'get_need_config'):
         required_fields = device_class.get_need_config()
@@ -440,28 +447,28 @@ def update_device_config(category: str, id: int, device_update: DeviceUpdate):
         if field not in config:
             conn.close()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"缺少配置字段: {field}")
-    cursor.execute("UPDATE devices SET config=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(config), id))
+    cursor.execute("UPDATE devices SET config=?, category=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", (json.dumps(config), device_category, id))
     conn.commit()
     conn.close()
     # 若对象已启动则同步更新对象 config
-    if id in device_pool.get(category, {}):
-        device = device_pool[category][id]
+    if id in device_pool:
+        device = device_pool[id]
         if hasattr(device, 'update_config'):
             device.update_config(config)
     return MessageResponse(message="配置已更新")
 
 # 3. 启动设备对象
-@app.post("/api/devices/{category}/{id}/start", response_model=MessageResponse)
-def start_device(category: str, id: int):
+@app.post("/api/devices/{id}/start", response_model=MessageResponse)
+def start_device(id: int):
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT type, config FROM devices WHERE id=? AND is_active=1", (id,))
+    cursor.execute("SELECT type, category, config FROM devices WHERE id=? AND is_active=1", (id,))
     row = cursor.fetchone()
     conn.close()
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备不存在或未启用")
     # 初始化对象,about bussiness logic
-    type_, config = row[0], json.loads(row[1])
+    type_, category, config = row[0], row[1], json.loads(row[2])
     
     obj = DEVICE_CONFIG[category][type_](config)
     if obj and hasattr(obj, 'start'):
@@ -471,8 +478,8 @@ def start_device(category: str, id: int):
     return MessageResponse(message="设备已启动")
 
 # 4. 停止并删除设备对象
-@app.post("/api/devices/{category}/{id}/stop", response_model=MessageResponse)
-def stop_device(category: str, id: int):
+@app.post("/api/devices/{id}/stop", response_model=MessageResponse)
+def stop_device(id: int):
     if id not in device_pool:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="设备未启动")
     obj = device_pool[id]
@@ -483,8 +490,8 @@ def stop_device(category: str, id: int):
 
 
 # 5. 删除设备（彻底从数据库移除）
-@app.delete("/api/devices/{category}/{id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_device(category: str, id: int):
+@app.delete("/api/devices/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_device(id: int):
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute("SELECT id FROM devices WHERE id=?", (id,))
@@ -501,8 +508,8 @@ def delete_device(category: str, id: int):
     return None
 
 # 获取设备连接状态
-@app.get("/api/devices/{category}/{id}/status", response_model=DeviceStatusResponse)
-def get_device_conn_status(category: str, id: int):
+@app.get("/api/devices/{id}/status", response_model=DeviceStatusResponse)
+def get_device_conn_status(id: int):
     if id not in device_pool:
         status = 0  # 未连接
     else:
@@ -514,12 +521,12 @@ def get_device_conn_status(category: str, id: int):
             status = 1 if device.is_connected() else 2
         else:
             status = 0
-    print(f"[ConnStatus] category={category}, id={id}, status={status}")
+    print(f"[ConnStatus] id={id}, status={status}")
     return DeviceStatusResponse(conn_status=status)
 
 
 # 获取所有设备分类
-@app.get("/api/device-categories", response_model=DeviceCategoryResponse)
+@app.get("/api/device/categories", response_model=DeviceCategoryResponse)
 def get_device_categories():
     return DeviceCategoryResponse(categories=list(DEVICE_CONFIG.keys()))
 
