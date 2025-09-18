@@ -218,13 +218,23 @@ class TeleopGroupBase(BaseModel):
     camera3_id: Optional[int] = None
 
 class TeleopGroupCreate(TeleopGroupBase):
+    id: str
     pass
 
 class TeleopGroupUpdate(TeleopGroupBase):
     name: Optional[str] = None
+    describe: Optional[str] = None
+    left_arm_id: Optional[int] = None
+    right_arm_id: Optional[int] = None
+    vr_id: Optional[int] = None
+    camera1_id: Optional[int] = None
+    camera2_id: Optional[int] = None
+    camera3_id: Optional[int] = None
 
 class TeleopGroupInDB(TeleopGroupBase):
     id: str
+    name: str
+    describe: Optional[str] = None
     created_at: str
     updated_at: str
     is_active: bool
@@ -234,6 +244,8 @@ class TeleopGroupInDB(TeleopGroupBase):
 
 class TeleopGroupResponse(TeleopGroupBase):
     id: str
+    name: str
+    describe: Optional[str] = None
     running: bool
 
     class Config:
@@ -531,28 +543,44 @@ def get_device_categories():
     return DeviceCategoryResponse(categories=list(DEVICE_CONFIG.keys()))
 
 # 获取所有遥操作组列表
-@app.get("/api/teleop-groups", response_model=List[TeleopGroupResponse])
-def list_teleop_groups():
+@app.get("/api/teleop-groups", response_model=List[TeleopGroupInDB])
+def list_teleop_groups(vr_id: Optional[int] = None, name: Optional[str] = None):
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT id, name, describe, left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id FROM teleop_groups WHERE is_active=1")
+    
+    # 构建查询语句
+    query = "SELECT id, name, describe, left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id, created_at, updated_at, is_active FROM teleop_groups WHERE is_active=1"
+    params = []
+    
+    # 添加查询条件
+    if vr_id is not None:
+        query += " AND vr_id=?"
+        params.append(vr_id)
+        
+    if name is not None:
+        query += " AND name LIKE ?"
+        params.append(f"%{name}%")
+    
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
     
     result = []
     for row in rows:
-        group_id = row[0]
-        config = {
-            "left_arm_id": row[3],
-            "right_arm_id": row[4],
-            "vr_id": row[5],
-            "camera1_id": row[6],
-            "camera2_id": row[7],
-            "camera3_id": row[8]
-        }
-        # Check if group is running
-        running = group_id in TELEOP_GROUPS and TELEOP_GROUPS[group_id].running
-        result.append(TeleopGroupResponse(id=group_id, name=row[1], describe=row[2], **config, running=running))
+        result.append(TeleopGroupInDB(
+            id=row[0],
+            name=row[1],
+            describe=row[2],
+            left_arm_id=row[3],
+            right_arm_id=row[4],
+            vr_id=row[5],
+            camera1_id=row[6],
+            camera2_id=row[7],
+            camera3_id=row[8],
+            created_at=row[9],
+            updated_at=row[10],
+            is_active=bool(row[11])
+        ))
     
     return result
 

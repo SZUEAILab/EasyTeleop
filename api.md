@@ -118,6 +118,9 @@
 
 ### GET /api/teleop-groups
 - 描述：获取所有遥操作组列表。
+- 查询参数（可选）：
+  - vr_id: integer - 根据VR设备ID过滤结果
+  - name: string - 根据名称模糊匹配过滤结果
 - 返回：
 ```json
 [
@@ -131,7 +134,9 @@
     "camera1_id": 4,
     "camera2_id": 5,
     "camera3_id": 6,
-    "running": true 
+    "created_at": "2025-01-01T00:00:00",
+    "updated_at": "2025-01-01T00:00:00",
+    "is_active": true
   }
 ]
 ```
