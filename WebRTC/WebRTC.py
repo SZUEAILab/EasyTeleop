@@ -181,7 +181,25 @@ class UnityWebRTC:
         self.should_run = False
 
 if __name__ == "__main__":
-    pass
+    import os
+    import sys
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from Device.Camera.RealSenseCamera import RealSenseCamera
+    from StreamTracker import CameraDeviceStreamTrack
+    camera_config = {
+        "serial": "153122070447" ,
+        "target_fps": 30
+    }
+    realsense_camera = RealSenseCamera(camera_config)
+    tracker = CameraDeviceStreamTrack()
+    
+    realsense_camera.start()
+    realsense_camera.on("frame",tracker.put_frame)
+    client = UnityWebRTC(connection_id="LeftEye", signaling_url="wss://webrtc.chainpray.top",tracker=tracker)
+    
+    asyncio.run(client.connect())
+    
+    
     
     # Example usage: 传入自定义相机对象或使用默认相机
     # tracker1 = RealSenseStreamTrack(serial="153122070447")

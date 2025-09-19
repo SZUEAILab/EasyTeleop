@@ -105,7 +105,7 @@ class RealSenseCamera(BaseDevice):
             if self.get_conn_status() ==  1:
                 try:
                     color_frame, depth_frame = self.get_frames()
-                    self.emit("frame", color_frame, depth_frame)
+                    self.emit("frame", color_frame)
                     # 只有当target_fps > 0时才进行帧率控制
                     if self.target_fps > 0:
                         # 帧率控制，而不是固定间隔
