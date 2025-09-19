@@ -1,7 +1,7 @@
 [project]
-name = "realman-teleoperate"
+name = "EasyTeleop"
 version = "0.1.0"
-description = "Add your description here"
+description = "Easy teleoperation tool for robotic arm"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
