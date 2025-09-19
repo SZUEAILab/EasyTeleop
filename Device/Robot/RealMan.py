@@ -4,9 +4,9 @@ import numpy as np
 import threading
 from threading import Lock
 from typing import Dict, Any
-from .Robot import Robot
+from .BaseRobot import BaseRobot
 
-class RM_controller(Robot):
+class RM_controller(BaseRobot):
     """
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
@@ -194,25 +194,73 @@ class RM_controller(Robot):
             print("[Control] Control stopped.")
 
     def move(self, tech_state):
-         
-        self.delta[0] = tech_state[0] - self.prev_tech_state[0]
-        self.delta[1] = tech_state[1] - self.prev_tech_state[1]
-        self.delta[2] = tech_state[2] - self.prev_tech_state[2]
-        self.delta[3] = tech_state[3] - self.prev_tech_state[3]
-        self.delta[4] = tech_state[4] - self.prev_tech_state[4]
-        self.delta[5] = tech_state[5] - self.prev_tech_state[5]
+        # 计算手柄在世界坐标系中的位移增量
+        delta_x = tech_state[0] - self.prev_tech_state[0]
+        delta_y = tech_state[1] - self.prev_tech_state[1]
+        delta_z = tech_state[2] - self.prev_tech_state[2]
         
+        # 获取手柄的姿态欧拉角（弧度）
+        # 假设顺序为 [x, y, z, rx, ry, rz]
+        controller_roll = self.prev_tech_state[3]
+        controller_pitch = self.prev_tech_state[4]
+        controller_yaw = self.prev_tech_state[5]
+        
+        # 创建绕Z-Y-X轴的旋转矩阵（ZYX约定）
+        # 先绕X轴旋转(roll)，再绕Y轴旋转(pitch)，最后绕Z轴旋转(yaw)
+        R_controller = np.array([
+            [np.cos(controller_yaw)*np.cos(controller_pitch),
+             np.cos(controller_yaw)*np.sin(controller_pitch)*np.sin(controller_roll) - np.sin(controller_yaw)*np.cos(controller_roll),
+             np.cos(controller_yaw)*np.sin(controller_pitch)*np.cos(controller_roll) + np.sin(controller_yaw)*np.sin(controller_roll)],
+            [np.sin(controller_yaw)*np.cos(controller_pitch),
+             np.sin(controller_yaw)*np.sin(controller_pitch)*np.sin(controller_roll) + np.cos(controller_yaw)*np.cos(controller_roll),
+             np.sin(controller_yaw)*np.sin(controller_pitch)*np.cos(controller_roll) - np.cos(controller_yaw)*np.sin(controller_roll)],
+            [-np.sin(controller_pitch),
+             np.cos(controller_pitch)*np.sin(controller_roll),
+             np.cos(controller_pitch)*np.cos(controller_roll)]
+        ])
+        
+        # 第一步：将世界坐标系中的位移转换到手柄的局部坐标系中
+        # 这里使用旋转矩阵的转置（等于逆矩阵）来进行坐标变换
+        tech_delta = R_controller.T @ np.array([delta_x, delta_y, delta_z])
+        tech_delta_x, tech_delta_y, tech_delta_z = tech_delta
+        
+        
+        
+        # 获取机械臂基座的姿态欧拉角
+        arm_base_roll = self.arm_first_state[3]
+        arm_base_pitch = self.arm_first_state[4]
+        arm_base_yaw = self.arm_first_state[5]
+        
+        # 创建机械臂基座的旋转矩阵
+        R_arm_base = np.array([
+            [np.cos(arm_base_yaw)*np.cos(arm_base_pitch),
+             np.cos(arm_base_yaw)*np.sin(arm_base_pitch)*np.sin(arm_base_roll) - np.sin(arm_base_yaw)*np.cos(arm_base_roll),
+             np.cos(arm_base_yaw)*np.sin(arm_base_pitch)*np.cos(arm_base_roll) + np.sin(arm_base_yaw)*np.sin(arm_base_roll)],
+            [np.sin(arm_base_yaw)*np.cos(arm_base_pitch),
+             np.sin(arm_base_yaw)*np.sin(arm_base_pitch)*np.sin(arm_base_roll) + np.cos(arm_base_yaw)*np.cos(arm_base_roll),
+             np.sin(arm_base_yaw)*np.sin(arm_base_pitch)*np.cos(arm_base_roll) - np.cos(arm_base_yaw)*np.sin(arm_base_roll)],
+            [-np.sin(arm_base_pitch),
+             np.cos(arm_base_pitch)*np.sin(arm_base_roll),
+             np.cos(arm_base_pitch)*np.cos(arm_base_roll)]
+        ])
+        
+        # 第二步：将手柄局部坐标系中的位移增量转换到机械臂末端坐标系中
+        # 这里使用手柄的旋转矩阵进行变换
+        arm_delta = R_arm_base @ np.array([tech_delta_x, tech_delta_y, tech_delta_z])
+        arm_delta_x, arm_delta_y, arm_delta_z = arm_delta
+        
+        # 应用转换后的位移增量到机械臂基座坐标系中
         next_state = [
-            self.arm_first_state[0] + self.delta[0],  
-            self.arm_first_state[1] + self.delta[1], 
-            self.arm_first_state[2] + self.delta[2], 
-            self.arm_first_state[3] + self.delta[3],
-            self.arm_first_state[4] + self.delta[4],
-            self.arm_first_state[5] + self.delta[5]
-        ] 
+            self.arm_first_state[0] + arm_delta_x,
+            self.arm_first_state[1] + arm_delta_y,
+            self.arm_first_state[2] + arm_delta_z,
+            self.arm_first_state[3] + (tech_state[3] - self.prev_tech_state[3]),
+            self.arm_first_state[4] + (tech_state[4] - self.prev_tech_state[4]),
+            self.arm_first_state[5] + (tech_state[5] - self.prev_tech_state[5])
+        ]
         
         success = self.arm_controller.rm_movep_canfd(next_state, False, 0, 80)
-    
+
     def moveq(self, tech_state):
         """四元数使用绝对姿态"""
 
