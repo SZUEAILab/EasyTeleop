@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException, Body, status
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Union
 import threading
 import uvicorn  # 导入uvicorn
 import sqlite3
@@ -149,7 +149,7 @@ def init_device_tables(db_path):
     # 遥操作组表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teleop_groups (
-            id VARCHAR(50) PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             name VARCHAR(100) NOT NULL,
             describe TEXT,
             left_arm_id INTEGER,
@@ -190,6 +190,10 @@ class DeviceCreate(DeviceBase):
     category: str
     pass
 
+class DeviceCreateResponse(BaseModel):
+    message: str
+    id: int
+
 class DeviceUpdate(BaseModel):
     config: dict
     category: Optional[str] = None
@@ -207,6 +211,18 @@ class DeviceStatusResponse(BaseModel):
 class DeviceCategoryResponse(BaseModel):
     categories: List[str]
 
+class DeviceTypeConfigResponse(BaseModel):
+    __root__: Dict[str, List[str]]
+    
+    class Config:
+        schema_extra = {
+            "example": {
+                "RealMan": ["ip", "port"],
+                "Quest": ["ip", "port"],
+                "RealSense": ["camera_type", "camera_position", "camera_serial"]
+            }
+        }
+
 class TeleopGroupBase(BaseModel):
     name: str
     describe: Optional[str] = None
@@ -218,8 +234,11 @@ class TeleopGroupBase(BaseModel):
     camera3_id: Optional[int] = None
 
 class TeleopGroupCreate(TeleopGroupBase):
-    id: str
     pass
+
+class TeleopGroupCreateResponse(BaseModel):
+    message: str
+    id: str
 
 class TeleopGroupUpdate(TeleopGroupBase):
     name: Optional[str] = None
@@ -363,7 +382,7 @@ def get_all_devices(category: Optional[str] = None):
 
 
 # 获取适配类型及config字段
-@app.get("/api/device/types")
+@app.get("/api/device/types", response_model=DeviceTypeConfigResponse)
 def get_adapted_types(category: str):
     if category not in DEVICE_CONFIG:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="类别错误")
@@ -375,14 +394,15 @@ def get_adapted_types(category: str):
             continue
         try:
             config_fields = cls.get_need_config()
-            result[key] = config_fields
+            # 只返回字段名列表，而不是字段名和描述
+            result[key] = list(config_fields.keys()) if isinstance(config_fields, dict) else config_fields
         except Exception as e:
             print(f"[Error] 获取设备类型 {category}/{key} 的配置字段失败: {e}")
             result[key] = []
-    return result
+    return {"__root__": result}
 
 # 新增设备（卡片添加）
-@app.post("/api/devices", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
+@app.post("/api/devices", status_code=status.HTTP_201_CREATED, response_model=DeviceCreateResponse)
 def add_device(device: DeviceCreate):
     type_ = device.type
     config = device.config
@@ -398,18 +418,23 @@ def add_device(device: DeviceCreate):
     # 使用类方法获取所需配置字段
     if hasattr(device_class, 'get_need_config'):
         required_fields = device_class.get_need_config()
+        # 只获取字段名列表
+        if isinstance(required_fields, dict):
+            required_fields = list(required_fields.keys())
     else:
-        required_fields = {}
+        required_fields = []
         
     for field in required_fields:
         if field not in config:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"缺少配置字段: {field}")
+    
     conn = get_db_conn()
     cursor = conn.cursor()
     cursor.execute("INSERT INTO devices (name, describe, category, type, config) VALUES (?, ?, ?, ?, ?)", (name, describe, category, type_, json.dumps(config)))
+    device_id = cursor.lastrowid
     conn.commit()
     conn.close()
-    return MessageResponse(message="设备已添加")
+    return DeviceCreateResponse(message="设备已添加", id=device_id)
 
 # 获取单个设备详情
 @app.get("/api/devices/{id}", response_model=Device)
@@ -585,23 +610,20 @@ def list_teleop_groups(vr_id: Optional[int] = None, name: Optional[str] = None):
     return result
 
 # 创建遥操作组
-@app.post("/api/teleop-groups/{group_id}", status_code=status.HTTP_201_CREATED, response_model=MessageResponse)
-def create_teleop_group(group_id: str, teleop_group: TeleopGroupCreate):
-    # 检查是否已存在
+@app.post("/api/teleop-groups", status_code=status.HTTP_201_CREATED, response_model=TeleopGroupCreateResponse)
+def create_teleop_group(teleop_group: TeleopGroupCreate):
+    # 插入新记录
     conn = get_db_conn()
     cursor = conn.cursor()
-    cursor.execute("SELECT id FROM teleop_groups WHERE id=?", (group_id,))
-    if cursor.fetchone():
-        conn.close()
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="遥操作组已存在")
-    
-    # 插入新记录
     cursor.execute('''INSERT INTO teleop_groups 
-                     (id, name, describe, left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id) 
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (group_id, teleop_group.name, teleop_group.describe,
+                     (name, describe, left_arm_id, right_arm_id, vr_id, camera1_id, camera2_id, camera3_id) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (teleop_group.name, teleop_group.describe,
                    teleop_group.left_arm_id, teleop_group.right_arm_id, teleop_group.vr_id,
                    teleop_group.camera1_id, teleop_group.camera2_id, teleop_group.camera3_id))
+    
+    # 获取数据库生成的自增ID
+    new_group_id = cursor.lastrowid
     conn.commit()
     conn.close()
     
@@ -614,9 +636,9 @@ def create_teleop_group(group_id: str, teleop_group: TeleopGroupCreate):
         "camera2_id": teleop_group.camera2_id,
         "camera3_id": teleop_group.camera3_id
     }
-    TELEOP_GROUPS[group_id] = TeleopGroup(group_id, config)
+    TELEOP_GROUPS[new_group_id] = TeleopGroup(new_group_id, config)
     
-    return MessageResponse(message="遥操作组已创建")
+    return TeleopGroupCreateResponse(message="遥操作组已创建", id=str(new_group_id))
 
 # 更新遥操作组
 @app.put("/api/teleop-groups/{group_id}", response_model=MessageResponse)

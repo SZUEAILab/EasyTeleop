@@ -77,7 +77,10 @@
 ```
 - 返回（状态码：201 Created）：
 ```json
-{ "message": "设备已添加" }
+{ 
+    "message": "设备已添加" 
+    "id": 4
+}
 ```
 
 ### PUT /api/devices/{id}
@@ -146,7 +149,6 @@
 - 请求体（JSON）：
 ```json
 { 
-  "id": "group1",
   "name": "主操作组",
   "describe": "主操作组描述",
   "left_arm_id": 1,
@@ -159,7 +161,10 @@
 ```
 - 返回（状态码：201 Created）：
 ```json
-{ "message": "遥操作组已创建" }
+{ 
+    "message": "遥操作组已创建" 
+    "id": 4
+}
 ```
 
 ### PUT /api/teleop-groups/{group_id}

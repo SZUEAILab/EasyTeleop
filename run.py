@@ -24,8 +24,8 @@ if __name__ == '__main__':
         # 注册回调函数
         teleop.on("leftGripDown",l_arm.start_control)
         teleop.on("leftGripUp",l_arm.stop_control)
-        # teleop.on("rightGripDown",r_arm.start_control)
-        # teleop.on("rightGripUp",r_arm.stop_control)
+        teleop.on("rightGripDown",r_arm.start_control)
+        teleop.on("rightGripUp",r_arm.stop_control)
         
         teleop.on("buttonATurnDown",dc.toggle_capture_state)
         
