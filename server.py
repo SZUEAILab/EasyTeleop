@@ -15,8 +15,8 @@ from Device.Camera.RealSenseCamera import RealSenseCamera
 from Device.Robot.RealMan import RM_controller
 from Device.VR.VRSocket import VRSocket
 
-from TeleopMiddleware import TeleopMiddleware
-from DataCollect import DataCollect
+from Components.TeleopMiddleware import TeleopMiddleware
+from Components.DataCollect import DataCollect
 
 # 遥操作组管理
 TELEOP_GROUPS = {}

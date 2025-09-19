@@ -1,7 +1,6 @@
-from TeleopMiddleware import TeleopMiddleware
+from Components import TeleopMiddleware, DataCollect
 from Device.VR.VRSocket import VRSocket
 from Device.Robot.RealMan import RM_controller
-from DataCollect import DataCollect
 from Device.Camera.RealSenseCamera import RealSenseCamera
 import time
 
@@ -12,7 +11,7 @@ if __name__ == '__main__':
         r_arm = RM_controller({"ip": "192.168.0.19", "port": 8080})
         vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
         teleop = TeleopMiddleware()
-        camera1 = RealSenseCamera({"serial":"153122070447"}) 
+        camera1 = RealSenseCamera({"serial":"153122070447","target_fps": 30}) 
         
         devices = [l_arm, r_arm, vrsocket, camera1]
 
@@ -35,7 +34,7 @@ if __name__ == '__main__':
         dc.start()
         camera1.start()
         l_arm.start()
-        # r_arm.start()
+        r_arm.start()
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响
         
         while(1):
