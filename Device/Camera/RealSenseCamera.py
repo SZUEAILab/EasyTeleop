@@ -13,16 +13,23 @@ class RealSenseCamera(BaseDevice):
     
     # 定义需要的配置字段为静态字段
     need_config = {
-        "serial": "摄像头序列号"
+        "serial": "摄像头序列号",
+        "target_fps": "目标帧率,0为不控制",
     }
     
+    @staticmethod
+    def find_device():
+        context = rs.context()
+        devices = context.query_devices()
+        # 打印设备信息
+        print("可用的设备:")
+        for i, device in enumerate(devices):
+            print(f"{i}: {device.get_info(rs.camera_info.name)} - Serial: {device.get_info(rs.camera_info.serial_number)}")
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self.camera_type = None
         self.camera_position = None
         self.camera_serial = None
-        self.target_fps = 30  # 目标帧率
-        self.min_interval = 1.0 / self.target_fps  # 最小间隔时间
         self.polling_thread = None
         self.pipeline = None    # 存储pipeline对象
         self.rsconfig = rs.config()  
@@ -48,6 +55,8 @@ class RealSenseCamera(BaseDevice):
         
         self.config = config
         self.camera_serial = config["serial"]
+        self.target_fps = config["target_fps"]
+        self.min_interval = 1.0 / self.target_fps if self.target_fps > 0 else 0
         
         return True
 
@@ -96,13 +105,15 @@ class RealSenseCamera(BaseDevice):
             if self.get_conn_status() ==  1:
                 try:
                     color_frame, depth_frame = self.get_frames()
-                    self.emit("frame",color_frame)
-                    # 帧率控制，而不是固定间隔
-                    current_time = time.time()
-                    elapsed = current_time - last_time
-                    if elapsed < self.min_interval:
-                        time.sleep(self.min_interval - elapsed)
-                    last_time = time.time()
+                    self.emit("frame", color_frame, depth_frame)
+                    # 只有当target_fps > 0时才进行帧率控制
+                    if self.target_fps > 0:
+                        # 帧率控制，而不是固定间隔
+                        current_time = time.time()
+                        elapsed = current_time - last_time
+                        if elapsed < self.min_interval:
+                            time.sleep(self.min_interval - elapsed)
+                        last_time = time.time()
                 except Exception as e:
                     print(f"Error polling camera frames: {str(e)}")
                     self.set_conn_status(2)
