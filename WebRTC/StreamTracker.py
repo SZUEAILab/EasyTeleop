@@ -3,9 +3,7 @@ import cv2
 import numpy as np
 from aiortc import VideoStreamTrack
 import pyrealsense2 as rs
-import asyncio
 import threading
-import time
 import queue
 
 class CameraStreamTrack(VideoStreamTrack):
