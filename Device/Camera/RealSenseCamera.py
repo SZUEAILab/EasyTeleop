@@ -19,29 +19,78 @@ class RealSenseCamera(BaseDevice):
     
     @staticmethod
     def find_device():
+        """
+        查找可用的RealSense设备
+        """
         context = rs.context()
         devices = context.query_devices()
         # 打印设备信息
         print("可用的设备:")
         for i, device in enumerate(devices):
             print(f"{i}: {device.get_info(rs.camera_info.name)} - Serial: {device.get_info(rs.camera_info.serial_number)}")
-    def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
-        self.camera_type = None
-        self.camera_position = None
+    def __init__(self, config: Dict[str, Any] = None):
+        
         self.camera_serial = None
-        self.polling_thread = None
-        self.pipeline = None    # 存储pipeline对象
+        self.pipeline = None    
         self.rsconfig = rs.config()  
+        # 子类字段初始化需要放在super()之前
+        super().__init__(config)
         
-        self._events = {
-             "frame": self._default_callback,
-        }
-        
-        # 如果提供了配置，则设置配置
-        if config:
-            self.set_config(config)
+        # 继承并扩展父类的事件
+        self._events.update({
+             "rgb_frame": self._default_callback,
+             "depth_frame": self._default_callback
+        })
             
+    def _main(self):
+        try:
+            last_time = time.time()
+            
+            color_frame, depth_frame = self.get_frames()
+            self.emit("rgb_frame", color_frame)
+            self.emit("depth_frame", depth_frame)
+
+            # 只有当target_fps > 0时才进行帧率控制
+            if self.target_fps > 0:
+                # 帧率控制，而不是固定间隔
+                current_time = time.time()
+                elapsed = current_time - last_time
+                if elapsed < self.min_interval:
+                    time.sleep(self.min_interval - elapsed)
+        except Exception as e:
+            print(f"Error get camera frames: {str(e)}")
+            self.set_conn_status(2)
+            return
+
+    def _connect_device(self) -> bool:
+        """连接RealSense摄像头"""
+        try:
+            print(f"camera_serial: {self.camera_serial}")
+            self.pipeline = rs.pipeline()
+            self.rsconfig.enable_device(self.camera_serial)
+            self.rsconfig.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+            self.rsconfig.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+            profile = self.pipeline.start(self.rsconfig)
+            # device = profile.get_device()
+            # device.hardware_reset()
+            print(f"connected successfully")
+            return True
+        except Exception as e:
+            print(f"connect failed: {str(e)}")
+            return False
+
+    def _disconnect_device(self) -> bool:
+        """断开RealSense摄像头连接"""
+        try:
+            if self.pipeline:
+                self.pipeline.stop()
+                self.pipeline = None
+            print(f"disconnected successfully")
+            return True
+        except Exception as e:
+            print(f"disconnect failed: {str(e)}")
+            return False
+
     def set_config(self, config: Dict[str, Any]) -> bool:
         """
         设置设备配置，验证配置是否符合need_config要求
@@ -59,72 +108,6 @@ class RealSenseCamera(BaseDevice):
         self.min_interval = 1.0 / self.target_fps if self.target_fps > 0 else 0
         
         return True
-
-    def start(self):
-        try:
-            self.set_conn_status(2)
-            if self.polling_thread is None or not self.polling_thread.is_alive():
-                self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
-                self.polling_thread.start()
-                return True
-            return False
-        except Exception as e:
-            print(f"Failed to start robot arm: {e}")
-
-    def connect(self) -> bool:
-        """连接RealSense摄像头"""
-        try:
-            self.pipeline = rs.pipeline()
-            self.rsconfig.enable_device(self.camera_serial)
-            self.rsconfig.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-            self.rsconfig.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-            profile = self.pipeline.start(self.rsconfig)
-            # device = profile.get_device()
-            # device.hardware_reset()
-            print(f"connected successfully")
-            return True
-        except Exception as e:
-            print(f"connect failed: {str(e)}")
-            return False
-
-    def disconnect(self) -> bool:
-        """断开RealSense摄像头连接"""
-        try:
-            if self.pipeline:
-                self.pipeline.stop()
-                self.pipeline = None
-            print(f"disconnected successfully")
-            return True
-        except Exception as e:
-            print(f"disconnect failed: {str(e)}")
-            return False
-
-    def _poll_state(self):
-        last_time = time.time()
-        while self.get_conn_status():
-            if self.get_conn_status() ==  1:
-                try:
-                    color_frame, depth_frame = self.get_frames()
-                    self.emit("frame", color_frame)
-                    # 只有当target_fps > 0时才进行帧率控制
-                    if self.target_fps > 0:
-                        # 帧率控制，而不是固定间隔
-                        current_time = time.time()
-                        elapsed = current_time - last_time
-                        if elapsed < self.min_interval:
-                            time.sleep(self.min_interval - elapsed)
-                        last_time = time.time()
-                except Exception as e:
-                    print(f"Error polling camera frames: {str(e)}")
-                    self.set_conn_status(2)
-                    continue
-            else:
-                try:
-                    if self.connect():
-                        print("Camera reconnected")
-                        self.set_conn_status(1)
-                except Exception as e:
-                    time.sleep(self.reconnect_interval)
                 
 
     def get_frames(self) -> Tuple[np.ndarray, np.ndarray]:
@@ -140,14 +123,3 @@ class RealSenseCamera(BaseDevice):
             print(f"Failed to get frames from RealSense")
             return None, None
         return np.asanyarray(color_frame.get_data()), np.asanyarray(depth_frame.get_data())
-
-    def stop(self):
-        """停止设备"""
-        self.set_conn_status(0)
-        # self.disconnect()
-        if self.polling_thread is not None:
-            self.polling_thread.join()
-            self.polling_thread = None
-        
-    def __del__(self):
-        self.stop()

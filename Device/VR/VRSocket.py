@@ -35,22 +35,7 @@ class VRSocket(BaseDevice):
         if config:
             self.set_config(config)
 
-    def set_config(self, config):
-        """
-        设置设备配置，验证配置是否符合need_config要求
-        :param config: 配置字典
-        :return: 是否设置成功
-        """
-        # 检查必需的配置字段
-        for key in self.need_config:
-            if key not in config:
-                raise ValueError(f"缺少必需的配置字段: {key}")
-        
-        self.config = config
-        self.ip = config["ip"]
-        self.port = int(config["port"])
-        
-        return True
+    
     def _default_connect_callback(self):
         """默认连接回调"""
         print(f"[VR连接]: 已连接到 Unity 服务器 {self.ip}:{self.port}")
@@ -63,20 +48,9 @@ class VRSocket(BaseDevice):
         """默认错误回调"""
         print(f"[VR错误]: {error_msg}")
 
-    def connect(self):
-        """
-        建立到VR设备的Socket连接
-        """
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            self.sock.connect((self.ip, self.port))
-            self.emit("connect")
-            return True
-        except Exception as e:
-            self.emit("error", f"连接失败: {e}")
-            return False
+    
 
-    def socket_receiver(self):
+    def _main(self):
         """
         Socket 接收线程
         """
@@ -109,54 +83,42 @@ class VRSocket(BaseDevice):
                     self.set_conn_status(2)
                 break
 
-    def _poll_state(self):
+    def _connect_device(self):
         """
-        连接监控线程：根据连接状态执行相应操作
+        建立到VR设备的Socket连接
         """
-        while self.get_conn_status() in [1, 2]:  # 只要处于已连接或断开连接状态就继续监控
-            if self.get_conn_status() == 1:
-                # 连接状态正常，执行接收逻辑
-                self.socket_receiver()
-            elif self.get_conn_status() == 2:
-                # 连接断开，尝试重新连接
-                try:
-                    if self.connect():
-                        self.set_conn_status(1)
-                except Exception as e:
-                    self.emit("error", f"重连尝试失败: {e}")
-                    time.sleep(self.reconnect_interval)
-            time.sleep(0.1)  # 短暂休眠避免过度占用CPU
-
-    def start(self):
-        """
-        启动设备
-        :return: 是否启动成功
-        """
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            self.set_conn_status(2)
-            if self.polling_thread is None or not self.polling_thread.is_alive():
-                self.polling_thread = threading.Thread(target=self._poll_state, daemon=True)
-                self.polling_thread.start()
-                return True
-            return False
-        except Exception as e:
-            self.emit("error", f"启动失败: {e}")
-            return False
-
-    def stop(self):
-        """
-        停止设备
-        :return: 是否停止成功
-        """
-        try:
-            self.set_conn_status(0)  # 设置为未连接状态
-            if self.polling_thread is not None:
-                self.polling_thread.join()
-                self.polling_thread = None
-            if self.sock:
-                self.sock.close()
-                self.sock = None
+            self.sock.connect((self.ip, self.port))
+            self.emit("connect")
             return True
         except Exception as e:
-            self.emit("error", f"停止设备时出错: {e}")
+            self.emit("error", f"连接失败: {e}")
             return False
+        
+    def _disconnect_device(self):
+        """
+        断开与VR设备的Socket连接
+        """
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+            self.emit("disconnect", "[VR断开连接]")
+        return True
+        
+    def set_config(self, config):
+        """
+        设置设备配置，验证配置是否符合need_config要求
+        :param config: 配置字典
+        :return: 是否设置成功
+        """
+        # 检查必需的配置字段
+        for key in self.need_config:
+            if key not in config:
+                raise ValueError(f"缺少必需的配置字段: {key}")
+        
+        self.config = config
+        self.ip = config["ip"]
+        self.port = int(config["port"])
+        
+        return True
