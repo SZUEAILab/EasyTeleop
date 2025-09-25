@@ -2,10 +2,13 @@ import socket
 import json
 import threading
 import time
-from ..BaseDevice import BaseDevice
+from .BaseVR import BaseVR
 
+"""
+TCP局域网直连的头显设备
+"""
 
-class VRSocket(BaseDevice):
+class VRSocket(BaseVR):
     # 定义需要的配置字段为静态字段
     need_config = {
         "ip": "服务器IP地址",
@@ -24,12 +27,11 @@ class VRSocket(BaseDevice):
         self.reconnect_interval = 1  # 重连间隔秒数
         
         # 设置事件回调
-        self._events = {
-             "message": self._default_callback,
+        self._events.update({
              "connect": self._default_connect_callback,
              "disconnect": self._default_disconnect_callback,
              "error": self._default_error_callback
-        }
+        })
         
         # 如果提供了配置，则设置配置
         if config:

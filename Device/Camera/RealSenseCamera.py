@@ -5,10 +5,10 @@ import pyrealsense2 as rs
 import threading
 import time
 # from pyorbbecsdk import *
-from ..BaseDevice import BaseDevice
+from .BaseCamera import BaseCamera
 
 
-class RealSenseCamera(BaseDevice):
+class RealSenseCamera(BaseCamera):
     """RealSense摄像头设备实现"""
     
     # 定义需要的配置字段为静态字段
@@ -38,7 +38,6 @@ class RealSenseCamera(BaseDevice):
         
         # 继承并扩展父类的事件
         self._events.update({
-             "rgb_frame": self._default_callback,
              "depth_frame": self._default_callback
         })
             
@@ -47,7 +46,7 @@ class RealSenseCamera(BaseDevice):
             last_time = time.time()
             
             color_frame, depth_frame = self.get_frames()
-            self.emit("rgb_frame", color_frame)
+            self.emit("frame", color_frame)
             self.emit("depth_frame", depth_frame)
 
             # 只有当target_fps > 0时才进行帧率控制

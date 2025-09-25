@@ -131,6 +131,13 @@ class TeleopGroup:
 def init_device_tables(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE nodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+    ''')
     # 设备表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS devices (
