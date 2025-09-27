@@ -134,6 +134,8 @@ def init_device_tables(db_path):
     cursor.execute('''
         CREATE TABLE nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid VARCHAR(36) UNIQUE NOT NULL,
+            status BOOLEAN DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -142,6 +144,7 @@ def init_device_tables(db_path):
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            node_id INTEGER NOT NULL,
             name VARCHAR(20) NOT NULL,
             describe TEXT NOT NULL,
             category VARCHAR(20) NOT NULL,
@@ -149,7 +152,8 @@ def init_device_tables(db_path):
             config TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_active BOOLEAN DEFAULT 1
+            is_active BOOLEAN DEFAULT 1,
+            FOREIGN KEY (node_id) REFERENCES nodes (id)
         )
     ''')
     
@@ -157,6 +161,7 @@ def init_device_tables(db_path):
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teleop_groups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            node_id INTEGER NOT NULL,
             name VARCHAR(100) NOT NULL,
             describe TEXT,
             left_arm_id INTEGER,
@@ -173,7 +178,8 @@ def init_device_tables(db_path):
             FOREIGN KEY (vr_id) REFERENCES devices (id),
             FOREIGN KEY (camera1_id) REFERENCES devices (id),
             FOREIGN KEY (camera2_id) REFERENCES devices (id),
-            FOREIGN KEY (camera3_id) REFERENCES devices (id)
+            FOREIGN KEY (camera3_id) REFERENCES devices (id),
+            FOREIGN KEY (node_id) REFERENCES nodes (id)
         )
     ''')
     
