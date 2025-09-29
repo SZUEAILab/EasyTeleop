@@ -12,5 +12,6 @@ wheels/
 *.yaml
 
 *.db
+*.txt
 
 datasets/*

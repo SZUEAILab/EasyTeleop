@@ -1,4 +1,4 @@
-# RealMan Teleoperate System
+# Easy Teleoperate System
 
 RealMan Teleoperate System 是一个基于VR设备控制机械臂的遥操作系统。该系统支持多种设备的集成，包括RealMan机械臂、VR头显和RealSense摄像头，并提供Web界面进行设备管理和遥操作控制。
 

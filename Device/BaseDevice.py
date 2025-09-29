@@ -8,7 +8,8 @@ import time
 
 class BaseDevice(ABC):
     """设备接口抽象类，定义设备的基本操作和状态管理"""
-    
+    name: str = "Base Device"
+    description: str = "Base device description"
     # 需要的配置字段（由子类定义，格式: {字段名: 类型/描述}）
     need_config: Dict[str, Any] = {}
 
@@ -19,6 +20,18 @@ class BaseDevice(ABC):
         :return: 配置字段字典
         """
         return cls.need_config
+    
+    @classmethod
+    def get_type_info(cls) -> Dict[str, Any]:
+        """
+        获取设备类型信息
+        :return: 包含名称、描述和配置需求的字典
+        """
+        return {
+            "name": cls.name,
+            "description": cls.description,
+            "need_config": cls.need_config
+        }
     
     def __init__(self, config: Dict[str, Any] = None):
         # 配置信息

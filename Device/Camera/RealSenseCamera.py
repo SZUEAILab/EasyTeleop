@@ -12,9 +12,18 @@ class RealSenseCamera(BaseCamera):
     """RealSense摄像头设备实现"""
     
     # 定义需要的配置字段为静态字段
+    name = "通用RealSense摄像头"
+    description = "有线连接的RealSense摄像头设备"
     need_config = {
-        "serial": "摄像头序列号",
-        "target_fps": "目标帧率,0为不控制",
+        "serial": {
+            "type": "string",
+            "description": "RealSense设备序列号"
+        },
+        "target_fps": {
+            "type": "integer",
+            "description": "目标帧率,0为不控制",
+            "default": 30
+        },
     }
     
     @staticmethod

@@ -10,9 +10,18 @@ TCP局域网直连的头显设备
 
 class VRSocket(BaseVR):
     # 定义需要的配置字段为静态字段
+    name = "TCP Socket 头显"
+    description = "使用TCP Socket连接的VR设备"
     need_config = {
-        "ip": "服务器IP地址",
-        "port": "服务器端口号"
+        "ip": {
+            "type": "string",
+            "description": "服务器IP地址"
+        },
+        "port": {
+            "type": "integer",
+            "description": "服务器端口号",
+            "default": 12345
+        }
     }
     
     def __init__(self, config=None):

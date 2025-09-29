@@ -4,9 +4,16 @@ import time
 import cv2
 import os
 import csv
+import time
+import asyncio
+from typing import Any, Callable, Dict
 
 class DataCollect:
     def __init__(self, save_dir="datasets/temp"):
+        self._event = {
+            "status_change": self._default_callback
+        }
+
         self.video_queue = queue.Queue()
         self.state_queue = queue.Queue()
         self.running = False
@@ -18,6 +25,85 @@ class DataCollect:
         os.makedirs(self.save_dir, exist_ok=True)
         self.video_consumer_thread = None
         self.state_consumer_thread = None
+
+    def on(self, event_name: str, callback: Callable = None) -> Callable:
+        """
+        注册事件回调函数 - 可作为装饰器或普通方法使用
+        :param event_name: 事件名称
+        :param callback: 回调函数（可选，当作为装饰器使用时不需要）
+        :return: 装饰器函数或注册结果
+        """
+        # 装饰器工厂模式
+        def decorator(func):
+            if not callable(func):
+                raise ValueError("回调函数必须是可调用对象")
+                
+            # 如果事件存在则更新回调
+            if event_name in self._events:
+                self._events[event_name] = func
+            else:
+                # 如果事件不存在，添加新的事件处理器
+                self._events[event_name] = func
+            return func
+        
+        # 如果提供了callback参数，则按照原来的方式工作
+        if callback is not None:
+            return decorator(callback)
+        
+        # 否则返回装饰器
+        return decorator
+
+    def off(self, event_name: str) -> bool:
+        """
+        移除事件回调函数，恢复默认回调
+        :param event_name: 事件名称
+        """
+        if event_name in self._events:
+            self._events[event_name] = self._default_callback
+            return True
+        
+        return False
+
+    def emit(self, event_name: str, *args, **kwargs) -> None:
+        """
+        触发事件，执行注册的回调函数
+        事件处理应是非阻塞的，对于耗时操作应该在独立线程中执行
+        :param event_name: 事件名称
+        :param args: 位置参数
+        :param kwargs: 关键字参数
+        """
+        if event_name in self._events:
+            try:
+                # self._events[event_name](*args, **kwargs)
+                # 异步执行回调函数以避免阻塞事件循环
+                callback = self._events[event_name]
+                if asyncio.iscoroutinefunction(callback):
+                    # 如果是异步函数，在新事件循环中运行
+                    thread = threading.Thread(target=self._run_async_callback, args=(callback, args, kwargs), daemon=True)
+                    thread.start()
+                else:
+                    # 同步函数在新线程中运行以避免阻塞
+                    thread = threading.Thread(target=callback, args=args, kwargs=kwargs, daemon=True)
+                    thread.start()
+            except Exception as e:
+                self.emit("error", f"事件{event_name}执行失败: {str(e)}")
+
+    def _run_async_callback(self, callback, args, kwargs):
+        """运行异步回调函数"""
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(callback(*args, **kwargs))
+            loop.close()
+        except Exception as e:
+            self.emit("error", f"异步事件回调执行失败: {str(e)}")
+
+    def _default_callback(self, *args, **kwargs) -> None:
+        """默认回调函数，什么也不做"""
+        pass
+    def _default_error_callback(self, error_msg: str) -> None:
+        """默认错误回调函数，打印错误信息"""
+        print(f"设备{self.__class__.__name__}发生错误: {error_msg}")
 
     def put_video_frame(self, frame, ts=None):
         """向视频队列添加帧（frame为numpy数组），附带时间戳"""
@@ -48,6 +134,7 @@ class DataCollect:
             self.capture_state = 1
         else:
             self.capture_state = 0
+        self.emit("status_change", self.capture_state)
 
     def _start_new_session(self):
         """开始新的采集会话，创建时间戳文件夹"""

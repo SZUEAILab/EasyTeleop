@@ -1,4 +1,4 @@
-from Robotic_Arm.rm_robot_interface import *
+from Robotic_Arm.rm_robot_interface import rm_thread_mode_e, RoboticArm
 import time
 import numpy as np
 import threading
@@ -6,14 +6,23 @@ from threading import Lock
 from typing import Dict, Any
 from .BaseRobot import BaseRobot
 
-class RM_controller(BaseRobot):
+class RealMan(BaseRobot):
     """
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
     # 定义需要的配置字段为静态字段
+    name = "睿尔曼R75机械臂"
+    description = "用于控制RealMan机械臂的机器人控制器"
     need_config = {
-        "ip": "服务器IP地址",
-        "port": "服务器端口号",
+        "ip": {
+            "type": "string",
+            "description": "服务器IP地址",
+        },
+        "port": {
+            "type": "integer",
+            "description": "服务器端口号",
+            "default": 8080
+        },
     }
     
     def __init__(self, config: Dict[str, Any]):
