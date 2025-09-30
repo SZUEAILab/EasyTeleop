@@ -18,12 +18,12 @@ logging.basicConfig(
 )
 
 class Node:
-    def __init__(self, backend_url: str = "http://localhost:8000"):
+    def __init__(self, backend_url: str = "http://localhost:8000",websocket_uri: str = "ws://localhost:8000/ws/rpc"):
         self.backend_url = backend_url
         self.node_id = None
         self.websocket_rpc = WebSocketRPC()
         
-        self.websocket_uri = "ws://localhost:8000/ws/rpc"
+        self.websocket_uri = websocket_uri
         
         self.devices_config = []
         self.teleop_groups_config = []
@@ -489,7 +489,8 @@ class Node:
 # 运行节点示例
 async def main():
     # 创建节点实例
-    node = Node()
+    node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc")
+    # node = Node()
     
     try:
         # 注册节点

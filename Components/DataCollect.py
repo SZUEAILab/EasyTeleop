@@ -1,16 +1,15 @@
-import threading
 import queue
+import threading
 import time
-import cv2
 import os
 import csv
-import time
 import asyncio
-from typing import Any, Callable, Dict
+import cv2
+from typing import Callable
 
 class DataCollect:
     def __init__(self, save_dir="datasets/temp"):
-        self._event = {
+        self._events = {
             "status_change": self._default_callback
         }
 

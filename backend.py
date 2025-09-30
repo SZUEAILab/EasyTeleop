@@ -222,7 +222,7 @@ async def handle_jsonrpc_response(message: dict, node_id: int = None):
                     future.set_result(message)
                 break
 
-# API路由
+# 节点相关API路由
 @app.post("/api/node", response_model=NodeRegisterResponse, status_code=201)
 async def register_node(request: NodeRegisterRequest):
     """节点注册API"""
@@ -371,6 +371,7 @@ async def get_node(node_id: int):
     conn.close()
     return node
 
+# 设备相关API路由
 @app.get("/api/device/categories")
 async def get_device_categories(node_id: int = Query(...)):
     """获取所有设备分类"""
@@ -691,6 +692,7 @@ async def delete_device(device_id: int):
     finally:
         conn.close()
 
+# 遥操组相关API路由
 @app.get("/api/teleop-groups/types")
 async def get_teleop_group_types_info(node_id: int = Query(...)):
     """获取遥操组的所有类型和对应的need_config"""
@@ -1062,6 +1064,7 @@ async def delete_teleop_group(id: int):
     finally:
         conn.close()
 
+# 通知相关函数
 async def notify_node_config_update(node_id: int):
     """通知Node更新配置"""
     if node_id in node_websockets:
@@ -1273,4 +1276,3 @@ async def startup_event():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

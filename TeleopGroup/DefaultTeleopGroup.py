@@ -74,7 +74,7 @@ class DefaultTeleopGroup(BaseTeleopGroup):
 
             if self.devices[3]:
                 self.devices[3].on("frame",self.data_collect.put_video_frame)
-            if self.devices[3]:
+            if self.devices[4]:
                 self.devices[4].on("frame",self.data_collect.put_video_frame)
             if self.devices[5]:
                 self.devices[5].on("frame",self.data_collect.put_video_frame)
