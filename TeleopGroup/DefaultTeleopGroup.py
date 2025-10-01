@@ -1,5 +1,10 @@
 from TeleopGroup.BaseTeleopGroup import BaseTeleopGroup
+import threading
+import time
+import logging
 
+# 创建日志记录器
+logger = logging.getLogger(__name__)
 
 class DefaultTeleopGroup(BaseTeleopGroup):
     """默认遥操组类型，支持双臂+VR+3摄像头的标准配置"""
@@ -46,6 +51,8 @@ class DefaultTeleopGroup(BaseTeleopGroup):
 
     def __init__(self, devices = None):
         super().__init__(devices)
+        self.status_thread = None
+        self.status_thread_running = False
 
     def start(self) -> bool:
         """
@@ -85,6 +92,11 @@ class DefaultTeleopGroup(BaseTeleopGroup):
                     device.start()
                 
             self.running = True
+            
+            # 启动状态打印线程
+            # self.status_thread_running = True
+            # self.status_thread = threading.Thread(target=self._print_device_status, daemon=True)
+            # self.status_thread.start()
             return True
         except Exception as e:
             print(f"启动默认遥操组失败: {e}")
@@ -97,6 +109,11 @@ class DefaultTeleopGroup(BaseTeleopGroup):
         """
         try:
             print("停止默认遥操组")
+            
+            # 停止状态打印线程
+            self.status_thread_running = False
+            if self.status_thread and self.status_thread.is_alive():
+                self.status_thread.join(timeout=2.0)
             
             # 停止所有设备
             for device in self.devices:
@@ -114,3 +131,24 @@ class DefaultTeleopGroup(BaseTeleopGroup):
         except Exception as e:
             print(f"停止默认遥操组失败: {e}")
             return False
+
+    def _print_device_status(self):
+        """
+        定期打印设备状态的线程函数
+        """
+        while self.status_thread_running and self.running:
+            try:
+                status_info = []
+                for i, device in enumerate(self.devices):
+                    if device:
+                        status_info.append(f"Device[{i}]: {device.__class__.__name__}, Status: {device.get_conn_status()}")
+                    else:
+                        status_info.append(f"Device[{i}]: None")
+                
+                logger.info("设备状态: " + ", ".join(status_info))
+            except Exception as e:
+                logger.error(f"获取设备状态时出错: {e}")
+            
+            # 等待1秒
+            time.sleep(1)
+            

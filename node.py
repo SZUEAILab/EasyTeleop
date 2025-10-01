@@ -489,8 +489,8 @@ class Node:
 # 运行节点示例
 async def main():
     # 创建节点实例
-    node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc")
-    # node = Node()
+    # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc")
+    node = Node()
     
     try:
         # 注册节点

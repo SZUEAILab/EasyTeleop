@@ -10,40 +10,40 @@ RealMan Teleoperate System 是一个基于VR设备控制机械臂的遥操作系
 - 实时状态监控：实时显示设备连接状态和运行情况
 - 数据采集：支持遥操作过程中的数据采集和存储
 
-## 技术架构
+## 系统架构
 
-### 核心组件
+本系统采用分布式架构，包含两个主要组件：
 
-#### BaseDevice 基类
-所有设备的抽象基类，提供统一的接口：
-- 事件回调机制
-- 配置管理
-- 连接状态管理
+### Backend (后端服务)
+- 使用Go语言开发
+- 负责提供Web管理界面
+- 管理多个Node节点的注册和通信
+- 提供RESTful API接口
 
-#### 设备类
-- **Robot类**：机械臂控制抽象基类，具体实现如RM_controller
-- **VRSocket类**：负责与VR头显的TCP连接和数据接收
-- **Camera类**：摄像头设备抽象类，具体实现如RealSenseCamera
+### Node (设备控制节点)
+- 使用Python开发
+- 负责直接控制硬件设备（机械臂、VR、摄像头等）
+- 通过WebSocket与Backend通信
+- 支持多实例部署，每个Node可管理一组设备
 
-#### 核心业务逻辑
-- **TeleopMiddleware**：处理VR数据并转换为机械臂控制指令
-- **DataCollect**：数据采集模块，用于收集遥操作过程中的视频和状态数据
-- **TeleopGroup**：遥操作组管理，协调多个设备协同工作
+两者通过WebSocket RPC协议进行通信，实现设备控制与Web管理的分离。
 
 ## 安装指南
 
 ### 环境要求
 - Python 3.10+
 - Windows/Linux/macOS
+- uv 包管理器
 
 ### 安装依赖
-```bash
-pip install -r requirements.txt
-```
 
-或者使用pyproject.toml:
+使用uv管理项目依赖：
 ```bash
-pip install .
+# 安装uv（如果尚未安装）
+pip install uv
+
+# 安装项目依赖
+uv sync
 ```
 
 ### 主要依赖
@@ -57,8 +57,16 @@ pip install .
 ## 使用方法
 
 ### 启动服务
+
+1. 启动Backend服务（python替代）:
 ```bash
-python run.py
+# 在Backend项目目录下
+uv run server.py
+```
+
+2. 启动Node节点（Python服务）:
+```bash
+uv run run.py
 ```
 
 访问 http://localhost:8000 查看Web界面
@@ -81,15 +89,18 @@ python run.py
 ## 项目结构
 ```
 .
+├── Components/             # 核心组件模块
+│   ├── DataCollect.py      # 数据采集模块
+│   ├── TeleopMiddleware.py # 遥操作中间件
+│   └── WebSocketRPC.py     # WebSocket RPC通信
 ├── Device/                 # 设备相关模块
 │   ├── Camera/             # 摄像头设备
 │   ├── Robot/              # 机械臂设备
 │   └── VR/                 # VR设备
+├── TeleopGroup/            # 遥操作组管理
+├── WebRTC/                 # WebRTC视频流支持
 ├── static/                 # Web前端静态文件
 ├── test/                   # 测试文件
-├── DataCollect.py          # 数据采集模块
-├── TeleopGroup.py          # 遥操作组管理
-├── TeleopMiddleware.py     # 遥操作中间件
 ├── server.py               # Web服务
 └── run.py                  # 主程序入口
 ```

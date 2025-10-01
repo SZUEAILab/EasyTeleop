@@ -969,7 +969,7 @@ async def start_teleop_group(id: int):
             "method": "node.start_teleop_group",
             "params": {
                 "id": id,
-                "config": config_data
+                # "config": config_data
             },
             "id": rpc_id
         }
@@ -1004,37 +1004,55 @@ async def stop_teleop_group(id: int):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
+    # 获取遥操组信息
+    cursor.execute(
+        """SELECT id, node_id, name, description, type, config, status 
+           FROM teleop_groups WHERE id = ?""",
+        (id,)
+    )
+    
+    row = cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Teleop group not found")
+        
+    node_id = row[1]
+    if node_id not in node_websockets:
+        raise HTTPException(status_code=400, detail="Node not connected")
+        
     try:
-        # 获取遥操组信息
-        cursor.execute(
-            """SELECT id, node_id, name, description, type, config, status, 
-                      created_at, updated_at FROM teleop_groups WHERE id = ?""",
-            (id,)
-        )
+        # 发送启动遥操组的RPC请求
+        websocket = node_websockets[node_id]
+        rpc_id = int(time.time() * 1000)
         
-        row = cursor.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Teleop group not found")
+        rpc_request = {
+            "jsonrpc": "2.0",
+            "method": "node.stop_teleop_group",
+            "params": {
+                "id": id,
+            },
+            "id": rpc_id
+        }
         
-        node_id = row[1]
+        # 发送请求
+        await websocket.send_text(json.dumps(rpc_request))
         
-        # 检查节点是否连接
-        if node_id not in node_websockets:
-            raise HTTPException(status_code=400, detail="Node not connected")
+        # 等待并处理响应
+        result = await wait_for_response(websocket, rpc_id)
+        
+        # 检查结果，确保result是字典类型
+        if not isinstance(result, dict) or result.get("success") is not True:
+            raise HTTPException(status_code=400, detail="Failed to stop teleop group")
             
-        # 通知Node停止遥操组
-        await notify_node_stop_teleop_group(node_id, id)
-        
-        # 更新遥操组状态为已停止
+        # 更新数据库中的状态
         cursor.execute(
             "UPDATE teleop_groups SET status = 0, updated_at = datetime('now') WHERE id = ?",
             (id,)
         )
         conn.commit()
         
-        return {"message": "遥操作已停止"}
+        return {"message": "遥操组已停止动"}
+        
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
