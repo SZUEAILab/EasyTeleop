@@ -7,7 +7,7 @@ import requests
 import time
 import logging
 
-from Components.WebSocketRPC import WebSocketRPC
+from Components import WebSocketRPC
 from Device import get_device_types, get_device_classes
 from TeleopGroup import get_teleop_group_types, get_teleop_group_classes
 

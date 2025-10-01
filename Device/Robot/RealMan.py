@@ -26,9 +26,11 @@ class RealMan(BaseRobot):
     }
     
     def __init__(self, config: Dict[str, Any]):
-        super().__init__(config)
+        
         self.ip = None
         self.port = None
+        
+        super().__init__(config)
         
         # 继承并扩展父类的事件
         self._events.update({
@@ -38,9 +40,8 @@ class RealMan(BaseRobot):
         self.target_fps = 30  # 目标帧率
         self.min_interval = 1.0 / self.target_fps  # 最小间隔时间
         
-        self.arm_controller = None
+        self.arm_controller = RoboticArm(rm_thread_mode_e.RM_TRIPLE_MODE_E)
         self.handle = None
-        self.thread_mode = rm_thread_mode_e.RM_TRIPLE_MODE_E
         
         
         # 状态存储变量
@@ -56,10 +57,6 @@ class RealMan(BaseRobot):
         self.arm_first_state = None
         self.gripper_close = False
         self.delta = [0, 0, 0 , 0 , 0 , 0]
-        
-        # 如果提供了配置，则设置配置
-        if config:
-            self.set_config(config)
         
         
     
@@ -96,7 +93,6 @@ class RealMan(BaseRobot):
                 
     def _connect_device(self) -> bool:
         try:
-            self.arm_controller = RoboticArm(self.thread_mode)
             self.handle = self.arm_controller.rm_create_robot_arm(self.ip, self.port) 
             if self.handle.id == -1:
                 raise ConnectionError(f"Failed to connect to robot arm at {self.ip}:{self.port}")
@@ -121,6 +117,7 @@ class RealMan(BaseRobot):
             return True
             
         except Exception as e:
+            self.arm_controller.rm_delete_robot_arm()
             return False
         
     
@@ -135,8 +132,7 @@ class RealMan(BaseRobot):
             # 断开机械臂连接
             if self.arm_controller is not None and self.handle is not None:
                 # 调用SDK接口断开连接
-                self.arm_controller.rm_delete_robot_arm(self.handle)
-                self.arm_controller = None
+                self.arm_controller.rm_delete_robot_arm()
                 self.handle = None
             
             print(f"[Disconnect] Robot arm disconnected from {self.ip}:{self.port}")
@@ -195,8 +191,26 @@ class RealMan(BaseRobot):
             self.arm_first_state = None
             self.prev_tech_state = None
             print("[Control] Control stopped.")
-
     def move(self, tech_state):
+         
+        self.delta[0] = tech_state[0] - self.prev_tech_state[0]
+        self.delta[1] = tech_state[1] - self.prev_tech_state[1]
+        self.delta[2] = tech_state[2] - self.prev_tech_state[2]
+        self.delta[3] = tech_state[3] - self.prev_tech_state[3]
+        self.delta[4] = tech_state[4] - self.prev_tech_state[4]
+        self.delta[5] = tech_state[5] - self.prev_tech_state[5]
+        
+        next_state = [
+            self.arm_first_state[0] + self.delta[0],  
+            self.arm_first_state[1] + self.delta[1], 
+            self.arm_first_state[2] + self.delta[2], 
+            self.arm_first_state[3] + self.delta[3],
+            self.arm_first_state[4] + self.delta[4],
+            self.arm_first_state[5] + self.delta[5]
+        ] 
+        
+        success = self.arm_controller.rm_movep_canfd(next_state, False, 0, 80)
+    def moveRemote(self, tech_state):
         # 计算手柄在世界坐标系中的位移增量
         delta_x = tech_state[0] - self.prev_tech_state[0]
         delta_y = tech_state[1] - self.prev_tech_state[1]

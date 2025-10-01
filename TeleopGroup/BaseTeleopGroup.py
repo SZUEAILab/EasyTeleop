@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List
-from Components.TeleopMiddleware import TeleopMiddleware
-from Components.DataCollect import DataCollect
+from Components import TeleopMiddleware
+from Components import DataCollect
 
 
 class BaseTeleopGroup(ABC):
