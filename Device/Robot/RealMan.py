@@ -16,11 +16,12 @@ class RealMan(BaseRobot):
     need_config = {
         "ip": {
             "type": "string",
-            "description": "服务器IP地址",
+            "description": "睿尔曼机械臂IP地址",
+            "default": "192.168.1.18"
         },
         "port": {
             "type": "integer",
-            "description": "服务器端口号",
+            "description": "睿尔曼机械臂端口号",
             "default": 8080
         },
     }
