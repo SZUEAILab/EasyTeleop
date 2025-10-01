@@ -1,3 +1,7 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from Components import TeleopMiddleware, DataCollect
 from Device.VR.VRSocket import VRSocket
 from Device.Robot.RealMan import RealMan
