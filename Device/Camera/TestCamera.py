@@ -5,7 +5,7 @@ import time
 
 class TestCamera(BaseCamera):
     description = "测试摄像头"
-    name = "测试摄像头"
+    name = "会以设定帧率生成1080p的黑白脉冲图像"
     need_config = {
         "fps": {
             "description": "帧率",

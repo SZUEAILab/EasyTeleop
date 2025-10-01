@@ -88,6 +88,7 @@ class NodeRegisterResponse(BaseModel):
 class NodeResponse(BaseModel):
     id: int
     uuid: str
+    status: bool
     created_at: str
     updated_at: str
 
@@ -328,7 +329,7 @@ async def get_nodes(uuid: Optional[str] = None):
     
     if uuid:
         cursor.execute(
-            "SELECT id, uuid, created_at, updated_at FROM nodes WHERE uuid = ?",
+            "SELECT id, uuid,status, created_at, updated_at FROM nodes WHERE uuid = ?",
             (uuid,)
         )
     else:
@@ -339,8 +340,9 @@ async def get_nodes(uuid: Optional[str] = None):
         nodes.append(NodeResponse(
             id=row[0],
             uuid=row[1],
-            created_at=row[2],
-            updated_at=row[3]
+            status=row[2],
+            created_at=row[3],
+            updated_at=row[4]
         ))
         
     conn.close()
@@ -353,7 +355,7 @@ async def get_node(node_id: int):
     cursor = conn.cursor()
     
     cursor.execute(
-        "SELECT id, uuid, created_at, updated_at FROM nodes WHERE id = ?",
+        "SELECT id, uuid,status, created_at, updated_at FROM nodes WHERE id = ?",
         (node_id,)
     )
     
@@ -364,8 +366,9 @@ async def get_node(node_id: int):
     node = NodeResponse(
         id=row[0],
         uuid=row[1],
-        created_at=row[2],
-        updated_at=row[3]
+        status=row[2],
+        created_at=row[3],
+        updated_at=row[4]
     )
         
     conn.close()

@@ -6,7 +6,7 @@ import copy
 
 class TestRobot(BaseRobot):
     name = "测试机器人"
-    description = "测试机器人"
+    description = "提供start_control和stop_control方法的测试机器人,同时周期性生成模拟的机器人状态数据，触发state事件"
     need_config = {
         "fps": {
             "description": "状态更新帧率",
