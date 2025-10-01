@@ -56,6 +56,12 @@ uv sync
 
 ## 使用方法
 
+### 简单遥操
+
+在/run文件夹下放有一些测试文件，用于直接启动遥操
+
+- run_test.py:双臂和摄像头都采用Test类，VR头显采用VRSocket类
+
 ### 启动服务
 
 1. 启动Backend服务（python替代）:
