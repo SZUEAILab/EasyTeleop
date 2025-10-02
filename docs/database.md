@@ -12,7 +12,7 @@ EasyTeleop 系统使用 SQLite 数据库来存储设备和遥操作组的配置�
 | --- | --- | --- |
 | id | INTEGER PRIMARY KEY AUTOINCREMENT | 节点ID |
 | uuid | VARCHAR(36) UNIQUE NOT NULL | 节点UUID |
-| status | BOOLEAN DEFAULT 1 | 节点状态 |
+| status | BOOLEAN DEFAULT 0 | 节点状态 |
 | created_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 更新时间 |
 
@@ -65,7 +65,7 @@ def init_device_tables(db_path):
         CREATE TABLE IF NOT EXISTS nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uuid VARCHAR(36) UNIQUE NOT NULL,
-            status BOOLEAN DEFAULT 1,
+            status BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

@@ -1,5 +1,6 @@
 from fastapi import FastAPI, WebSocket, HTTPException, Query
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import sqlite3
@@ -18,7 +19,7 @@ logging.basicConfig(
 )
 
 # 数据库路径
-DB_PATH = "teleop_data.db"
+DB_PATH = "EasyTeleop.db"
 
 # WebSocket连接池
 node_websockets: Dict[int, WebSocketServerProtocol] = {}
@@ -35,6 +36,7 @@ def init_tables():
         CREATE TABLE IF NOT EXISTS nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uuid VARCHAR(36) UNIQUE NOT NULL,
+            status BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -68,7 +70,7 @@ def init_tables():
             config TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            status INTEGER DEFAULT 0,
+            status BOOLEAN DEFAULT 0,
             FOREIGN KEY (node_id) REFERENCES nodes (id)
         )
     ''')
@@ -333,7 +335,7 @@ async def get_nodes(uuid: Optional[str] = None):
             (uuid,)
         )
     else:
-        cursor.execute("SELECT id, uuid, created_at, updated_at FROM nodes")
+        cursor.execute("SELECT id, uuid,status, created_at, updated_at FROM nodes")
     
     nodes = []
     for row in cursor.fetchall():
@@ -510,35 +512,14 @@ async def get_device(device_id: int):
     conn.close()
     return device
 
-@app.get("/api/devices/{device_id}/status")
-async def get_device_status(device_id: int):
-    """获取设备连接状态"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    try:
-        cursor.execute(
-            "SELECT status, created_at, updated_at FROM devices WHERE id = ?",
-            (device_id,)
-        )
-        
-        row = cursor.fetchone()
-        if not row:
-            raise HTTPException(status_code=404, detail="Device not found")
-            
-        return {
-            "conn_status": row[0] or 0,
-        }
-    finally:
-        conn.close()
-
-@app.post("/api/devices", status_code=200)
+@app.post("/api/devices", status_code=201)
 async def create_device(device: DeviceCreate):
     """新增设备"""
-    # 对config进行测试，test成功才能创建设备
+    # 验证节点是否存在且连接
     if device.node_id not in node_websockets:
         raise HTTPException(status_code=400, detail="Node not connected")
     
+    # 对config进行测试，test成功才能创建设备
     try:
         # 直接发送RPC请求，不使用WebSocketRPC
         websocket = node_websockets[device.node_id]
@@ -562,10 +543,14 @@ async def create_device(device: DeviceCreate):
         
         # 检查测试结果，确保test_result是字典类型
         if not isinstance(test_result, dict) or test_result.get("success") is not True:
-            raise HTTPException(status_code=400, detail="Device test failed")
+            error_msg = test_result.get("error", "Device test failed") if isinstance(test_result, dict) else "Device test failed"
+            raise HTTPException(status_code=400, detail=error_msg)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Device test timeout")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Device test error: {str(e)}")
     
+    # 在数据库中创建设备
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
@@ -582,9 +567,16 @@ async def create_device(device: DeviceCreate):
         # 通知对应的Node更新配置
         await notify_node_config_update(device.node_id)
         
-        # 返回符合文档格式的响应
-        return {"message": "设备已添加", "id": device_id}
+        # 返回标准化的响应
+        return {
+            "message": "设备已添加", 
+            "id": device_id,
+            "device_id": device_id
+        }
         
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=f"Database constraint error: {str(e)}")
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -866,6 +858,11 @@ async def create_teleop_group(group: TeleopGroupCreate):
     cursor = conn.cursor()
     
     try:
+        # 验证节点是否存在
+        cursor.execute("SELECT id FROM nodes WHERE id = ?", (group.node_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=400, detail="Node not found")
+            
         cursor.execute(
             """INSERT INTO teleop_groups (node_id, name, description, type, config) 
                VALUES (?, ?, ?, ?, ?)""",
@@ -880,6 +877,9 @@ async def create_teleop_group(group: TeleopGroupCreate):
         
         return {"message": "遥操组已添加", "id": id}
         
+    except HTTPException:
+        conn.rollback()
+        raise
     except Exception as e:
         conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
@@ -1289,6 +1289,11 @@ async def handle_node_test_device(params: dict) -> int:
     
     return 1  # 测试成功
 
+# 挂载静态文件夹
+app.mount("/", StaticFiles(directory="static"), name="static")
+@app.get("/", include_in_schema=False)
+async def root():
+    return RedirectResponse(url="/index.html")
 # 启动时初始化数据库
 @app.on_event("startup")
 async def startup_event():

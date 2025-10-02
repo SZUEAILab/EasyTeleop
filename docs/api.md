@@ -317,27 +317,30 @@ EasyTeleop 采用分布式架构设计，由 Go 后端服务和 Python Node 控�
 
 无返回内容
 
-### GET `/api/devices/{id}/status`
+### POST `/api/devices/test`
 
-**获取设备连接状态**
+**测试设备配置**
+- 描述：测试设备是否可用
 
-描述：获取设备连接状态（前端可轮询）。
-
-**路径参数：**
-- id: 设备ID
-
-**返回：**
-
-```json
-{ 
-  "conn_status": 0,
+- 请求体（JSON）：
+```
+{
+  "node_id":123,
+  "name": "设备名称",
+  "description": "设备描述",
+  "category": "VR" | "Robot" | "Camera",
+  "type": "RealSense",
+  "config": {
+    "camera_serial": "427622270438"
+  }
 }
 ```
-
-**状态码说明：**
-- 0: 未连接
-- 1: 已连接
-- 2: 断开/异常
+- 返回（状态码：200 ）：
+```
+{ 
+    "message": "设备测试成功" 
+}
+```
 
 ## 遥操作组管理
 
@@ -552,31 +555,6 @@ EasyTeleop 采用分布式架构设计，由 Go 后端服务和 Python Node 控�
 { "message": "遥操作已停止" }
 ```
 
-### GET `/api/teleop-groups/{id}/status`
-
-**获取遥操作组运行状态和数据采集状态**
-
-描述：获取遥操作组运行状态和数据采集状态。
-
-**路径参数：**
-- id: 组ID
-
-**返回：**
-
-```json
-{
-  "running": true,
-  "collecting": false,
-}
-```
-
-**字段说明：**
-- running: 遥操作组运行状态
-  - true: 运行中
-  - false: 已停止
-- collecting: 数据采集状态
-  - false: 未采集
-  - true: 采集中
 
 ## 系统架构说明
 

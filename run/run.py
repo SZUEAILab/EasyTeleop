@@ -37,7 +37,7 @@ if __name__ == '__main__':
         vrsocket.on("message",teleop.handle_socket_data)
         
         dc.start()
-        camera1.start()
+        # camera1.start()
         l_arm.start()
         r_arm.start()
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响

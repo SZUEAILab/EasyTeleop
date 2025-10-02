@@ -34,16 +34,16 @@ if __name__ == '__main__':
             print(f"触发器: {trigger}")
             
             # l_hand.set_fingers(fingers)
-            l_hand.fingers["aux"] = trigger
+            l_hand.fingers["aux"] = int(trigger)
             l_hand.fingers["index"] = trigger
-            # l_hand.fingers["middle"] = trigger
-            # l_hand.fingers["ring"] = trigger
-            # l_hand.fingers["little"] = trigger
+            l_hand.fingers["middle"] = int(trigger)
+            l_hand.fingers["ring"] = int(trigger*0.9)
+            l_hand.fingers["little"] = int(trigger*0.8)
         teleop.on("leftGripUp",l_arm.stop_control)
 
         @teleop.on("leftStick")
         def stick_callback(state):
-            l_hand.fingers["flex"] = 50+int(state['x']*50)
+            l_hand.fingers["flex"] = 70+int(state['x']*50)
             # print(f"左摇杆: {state}")
 
         
