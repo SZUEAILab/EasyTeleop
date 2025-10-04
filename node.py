@@ -6,10 +6,14 @@ from typing import Dict, Any, List
 import requests
 import time
 import logging
+import threading
 
 from Components import WebSocketRPC
 from Device import get_device_types, get_device_classes
 from TeleopGroup import get_teleop_group_types, get_teleop_group_classes
+
+# 添加paho-mqtt导入
+import paho.mqtt.client as mqtt
 
 # 配置日志
 logging.basicConfig(
@@ -18,12 +22,17 @@ logging.basicConfig(
 )
 
 class Node:
-    def __init__(self, backend_url: str = "http://localhost:8000",websocket_uri: str = "ws://localhost:8000/ws/rpc"):
+    def __init__(self, backend_url: str = "http://localhost:8000",websocket_uri: str = "ws://localhost:8000/ws/rpc", mqtt_broker: str = "localhost", mqtt_port: int = 1883):
         self.backend_url = backend_url
         self.node_id = None
         self.websocket_rpc = WebSocketRPC()
         
         self.websocket_uri = websocket_uri
+        
+        # MQTT配置
+        self.mqtt_broker = mqtt_broker
+        self.mqtt_port = mqtt_port
+        self.mqtt_client = None
         
         self.devices_config = []
         self.teleop_groups_config = []
@@ -208,6 +217,12 @@ class Node:
         group_class = self.teleop_group_classes[group_type]
         teleop_group_instance = group_class(device_objects)
         
+        # 注册遥操组状态变化回调
+        teleop_group_instance.on("status_change", self._on_teleop_group_status_change)
+        
+        # 注册数据采集状态变化回调
+        teleop_group_instance.data_collect.on("status_change", self._on_data_collect_status_change)
+        
         # 启动遥操组
         success = teleop_group_instance.start()
         
@@ -254,6 +269,8 @@ class Node:
         if success:
             # 从遥操组池中移除实例
             del self.teleop_groups_pool[group_id]
+            # 上报遥操组状态变化
+            self._report_teleop_group_status(group_id, {"running": False, "collecting": False})
             return {"success": True, "message": f"Teleop group {group_id} stopped successfully"}
         else:
             return {"success": False, "message": f"Failed to stop teleop group {group_id}"}
@@ -380,6 +397,12 @@ class Node:
                 # 实例化设备
                 device_instance = device_class(config)
                 
+                # 使用装饰器方式注册设备状态变化回调
+                @device_instance.on("status_change")
+                def report_device_status(status_info, device_id=device_id):
+                    # 直接上报设备状态变化
+                    self._report_device_status(device_id, status_info["new_status"])
+                
                 # 将设备实例放入设备池
                 self.devices_pool[device_id] = device_instance
                 
@@ -484,8 +507,120 @@ class Node:
             
         print("正在连接到后端...")
         await self.websocket_rpc.connect(self.websocket_uri)
-
-
+        
+    def _setup_mqtt(self):
+        """设置MQTT客户端"""
+        if not self.mqtt_client:
+            try:
+                # 使用 MQTT v3.1.1 协议和回调 API v2
+                self.mqtt_client = mqtt.Client(protocol=mqtt.MQTTv311, callback_api_version=mqtt.CallbackAPIVersion.VERSION2)
+                
+                print(f"尝试连接MQTT服务器 {self.mqtt_broker}:{self.mqtt_port}...")
+                
+                # 设置遗嘱消息（LWT）
+                # 当节点异常断开时，自动发布离线消息
+                offline_payload = "0"  # 节点离线状态
+                self.mqtt_client.will_set(
+                    topic=f"node/{self.node_id}/status", 
+                    payload=offline_payload, 
+                    qos=1, 
+                    retain=True
+                )
+                
+                # 连接到MQTT服务器
+                self.mqtt_client.connect(self.mqtt_broker, self.mqtt_port, 60)
+                self.mqtt_client.loop_start()
+                
+                print("MQTT服务器连接成功")
+                
+                # 上报初始节点在线状态
+                self._report_node_status(1)
+                
+            except ConnectionRefusedError:
+                print("\nMQTT服务器连接被拒绝。请检查：")
+                print("1. MQTT服务器（如Mosquitto）是否已安装并运行")
+                print("2. 使用以下命令安装和启动Mosquitto：")
+                print("   winget install mosquitto")
+                print("   net start mosquitto")
+                print("3. 端口1883是否被占用或被防火墙阻止")
+                self.mqtt_client = None
+                raise
+                
+            except Exception as e:
+                print(f"\nMQTT服务器连接失败: {str(e)}")
+                print("请确保MQTT服务器已正确配置并运行")
+                self.mqtt_client = None
+                raise
+            
+    def _report_node_status(self,status):
+        """上报节点状态到MQTT"""
+        if self.mqtt_client and self.node_id:
+            topic = f"node/{self.node_id}/status"
+            payload = str(status)  # 1-在线, 0-离线
+            self.mqtt_client.publish(topic, payload, qos=1, retain=True)
+            
+    def _report_device_status(self, device_id, status):
+        """上报设备状态到MQTT"""
+        if self.mqtt_client and self.node_id:
+            topic = f"node/{self.node_id}/device/{device_id}/status"
+            # status: 0-未启动, 1-启动且连接成功, 2-启动但连接有问题正在重连
+            payload = str(status)
+            self.mqtt_client.publish(topic, payload, qos=1, retain=True)
+            
+    def _report_teleop_group_status(self, group_id, status):
+        """上报遥操组状态到MQTT"""
+        if self.mqtt_client and self.node_id:
+            # 上报启动状态
+            status_topic = f"node/{self.node_id}/teleop-group/{group_id}/status"
+            # 0-未启动, 1-已启动
+            status_payload = "1" if status.get('running', False) else "0"
+            self.mqtt_client.publish(status_topic, status_payload, qos=1, retain=True)
+            
+            # 上报采集状态
+            collecting_topic = f"node/{self.node_id}/teleop-group/{group_id}/collecting"
+            # 0-未采集, 1-采集中
+            collecting_payload = "1" if status.get('collecting', False) else "0"
+            self.mqtt_client.publish(collecting_topic, collecting_payload, qos=1, retain=True)
+            
+    def _on_device_status_change(self, status_info):
+        """设备状态变化回调"""
+        # 查找发生变化的设备ID
+        for device_id, device_instance in self.devices_pool.items():
+            # 通过比较对象引用确定是哪个设备发生了状态变化
+            if device_instance == status_info.get("device_instance"):
+                # 上报设备状态变化
+                self._report_device_status(device_id, status_info["new_status"])
+                break
+                
+    def _on_teleop_group_status_change(self, status_info):
+        """遥操组状态变化回调"""
+        # 查找发生变化的遥操组ID
+        for group_id, group_instance in self.teleop_groups_pool.items():
+            if group_instance == status_info:
+                # 上报遥操组状态变化
+                self._report_teleop_group_status(group_id, group_instance.get_status())
+                break
+                
+    def _on_data_collect_status_change(self, status):
+        """数据采集状态变化回调"""
+        # 数据采集状态变化已由遥操组状态变化统一处理，无需单独上报
+        pass
+        
+    def _report_data_collection_status(self, status):
+        """上报数据采集状态到MQTT"""
+        if self.mqtt_client:
+            topic = f"node/{self.node_id}/data-collection/status"
+            payload = json.dumps({
+                "status": status,
+                "timestamp": time.time()
+            })
+            self.mqtt_client.publish(topic, payload)
+            
+    def _set_all_devices_offline(self):
+        """将所有设备状态设置为离线"""
+        for device_id in self.devices_pool:
+            self._report_device_status(device_id, 0)
+            
 # 运行节点示例
 async def main():
     # 创建节点实例
@@ -495,6 +630,15 @@ async def main():
     try:
         # 注册节点
         await node.register_node()
+        print("节点注册成功")
+        
+        # 设置MQTT
+        node._setup_mqtt()
+
+        print("节点已注册")
+        
+        # 上报初始节点状态
+        node._report_node_status(1)
         
         # 连接到后端
         await node.connect_to_backend()

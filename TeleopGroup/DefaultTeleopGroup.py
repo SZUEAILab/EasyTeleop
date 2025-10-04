@@ -51,8 +51,6 @@ class DefaultTeleopGroup(BaseTeleopGroup):
 
     def __init__(self, devices = None):
         super().__init__(devices)
-        self.status_thread = None
-        self.status_thread_running = False
 
     def start(self) -> bool:
         """
@@ -65,7 +63,8 @@ class DefaultTeleopGroup(BaseTeleopGroup):
             # 启动数据采集
             self.data_collect.start()
             self.teleop.on("buttonATurnDown", self.data_collect.toggle_capture_state)
-            # self.data_collect.on("status_change", None)
+            # 注册数据采集状态变化回调
+            # self.data_collect.on("status_change",None)
             
             # 注册回调函数
             if self.devices[0]:
@@ -93,10 +92,8 @@ class DefaultTeleopGroup(BaseTeleopGroup):
                 
             self.running = True
             
-            # 启动状态打印线程
-            # self.status_thread_running = True
-            # self.status_thread = threading.Thread(target=self._print_device_status, daemon=True)
-            # self.status_thread.start()
+            # 触发状态变化事件
+            self.emit("status_change", True)
             return True
         except Exception as e:
             print(f"启动默认遥操组失败: {e}")
@@ -110,10 +107,9 @@ class DefaultTeleopGroup(BaseTeleopGroup):
         try:
             print("停止默认遥操组")
             
-            # 停止状态打印线程
-            self.status_thread_running = False
-            if self.status_thread and self.status_thread.is_alive():
-                self.status_thread.join(timeout=2.0)
+            # 触发状态变化事件（停止前）
+            self.running = False
+            self.emit("status_change", False)
             
             # 停止所有设备
             for device in self.devices:
@@ -126,29 +122,7 @@ class DefaultTeleopGroup(BaseTeleopGroup):
             # 需要等待数采后处理完毕
             
             self.devices.clear()
-            self.running = False
             return True
         except Exception as e:
             print(f"停止默认遥操组失败: {e}")
             return False
-
-    def _print_device_status(self):
-        """
-        定期打印设备状态的线程函数
-        """
-        while self.status_thread_running and self.running:
-            try:
-                status_info = []
-                for i, device in enumerate(self.devices):
-                    if device:
-                        status_info.append(f"Device[{i}]: {device.__class__.__name__}, Status: {device.get_conn_status()}")
-                    else:
-                        status_info.append(f"Device[{i}]: None")
-                
-                logger.info("设备状态: " + ", ".join(status_info))
-            except Exception as e:
-                logger.error(f"获取设备状态时出错: {e}")
-            
-            # 等待1秒
-            time.sleep(1)
-            
