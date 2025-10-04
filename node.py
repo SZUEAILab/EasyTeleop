@@ -528,7 +528,7 @@ class Node:
                 )
                 
                 # 连接到MQTT服务器
-                self.mqtt_client.connect(self.mqtt_broker, self.mqtt_port, 60)
+                self.mqtt_client.connect(self.mqtt_broker, 1883, 60)
                 self.mqtt_client.loop_start()
                 
                 print("MQTT服务器连接成功")
@@ -624,21 +624,16 @@ class Node:
 # 运行节点示例
 async def main():
     # 创建节点实例
-    # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc")
-    node = Node()
+    # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc,matt")
+    # node = Node()
     
     try:
+        node  = Node(mqtt_broker="121.43.162.224")
         # 注册节点
         await node.register_node()
-        print("节点注册成功")
         
         # 设置MQTT
         node._setup_mqtt()
-
-        print("节点已注册")
-        
-        # 上报初始节点状态
-        node._report_node_status(1)
         
         # 连接到后端
         await node.connect_to_backend()
