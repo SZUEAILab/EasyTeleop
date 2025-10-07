@@ -175,22 +175,11 @@ class TeleopGroupResponse(BaseModel):
     created_at: str
     updated_at: str
 
-class DeviceTestRequest(BaseModel):
+class DeviceTestRequest(DeviceBase):
     """
     设备测试请求模型
     """
     node_id: int = Field(..., description="节点ID")
-    category: str = Field(..., description="设备类别，例如'robot'、'camera'等")
-    type: str = Field(..., description="设备类型，例如'RealMan'、'RealSenseCamera'等")
-    config: Dict[str, Any] = Field(..., description="设备配置参数")
-
-class DeviceUpdateRequest(BaseModel):
-    """
-    设备更新请求模型
-    """
-    name: str = Field(..., description="设备名称")
-    description: str = Field(..., description="设备描述")
-    config: Dict[str, Any] = Field(..., description="设备配置参数")
 
 # 存储等待响应的Future对象，key为websocket对象id和rpc_id的组合
 pending_responses: Dict[str, asyncio.Future] = {}
