@@ -1,7 +1,8 @@
-from fastapi import FastAPI, WebSocket, HTTPException, Query
+from fastapi import FastAPI, WebSocket, HTTPException, Query, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import sqlite3
 import json
@@ -25,6 +26,15 @@ DB_PATH = "EasyTeleop.db"
 node_websockets: Dict[int, WebSocketServerProtocol] = {}
 
 app = FastAPI()
+
+# 添加CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 在生产环境中应该设置具体的域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 初始化数据库表
 def init_tables():
@@ -164,6 +174,23 @@ class TeleopGroupResponse(BaseModel):
     status: int
     created_at: str
     updated_at: str
+
+class DeviceTestRequest(BaseModel):
+    """
+    设备测试请求模型
+    """
+    node_id: int = Field(..., description="节点ID")
+    category: str = Field(..., description="设备类别，例如'robot'、'camera'等")
+    type: str = Field(..., description="设备类型，例如'RealMan'、'RealSenseCamera'等")
+    config: Dict[str, Any] = Field(..., description="设备配置参数")
+
+class DeviceUpdateRequest(BaseModel):
+    """
+    设备更新请求模型
+    """
+    name: str = Field(..., description="设备名称")
+    description: str = Field(..., description="设备描述")
+    config: Dict[str, Any] = Field(..., description="设备配置参数")
 
 # 存储等待响应的Future对象，key为websocket对象id和rpc_id的组合
 pending_responses: Dict[str, asyncio.Future] = {}
@@ -687,6 +714,64 @@ async def delete_device(device_id: int):
     finally:
         conn.close()
 
+@app.post("/api/devices/test", description="测试设备连接")
+async def test_device_connection(device_test_request: DeviceTestRequest):
+    """
+    测试设备连接
+    
+    该端点用于测试指定设备是否能成功连接。需要提供节点ID、设备类别、设备类型和设备配置参数。
+    
+    示例请求体:
+    {
+        "node_id": 1,
+        "category": "robot", 
+        "type": "RealMan",
+        "config": {
+            "ip": "192.168.1.100",
+            "port": 8080
+        }
+    }
+    """
+    node_id = device_test_request.node_id
+    category = device_test_request.category
+    type_name = device_test_request.type
+    config = device_test_request.config
+    # 验证节点是否存在且连接
+    if node_id not in node_websockets:
+        raise HTTPException(status_code=400, detail="Node not connected")
+    
+    try:
+        # 直接发送RPC请求，不使用WebSocketRPC
+        websocket = node_websockets[node_id]
+        rpc_id = int(time.time() * 1000)
+        rpc_request = {
+            "jsonrpc": "2.0",
+            "method": "node.test_device",
+            "params": {
+                "category": category,
+                "type": type_name,
+                "config": config
+            },
+            "id": rpc_id
+        }
+        
+        # 发送请求
+        await websocket.send_text(json.dumps(rpc_request))
+        
+        # 等待并处理响应
+        test_result = await wait_for_response(websocket, rpc_id)
+        
+        # 检查测试结果，确保test_result是字典类型
+        if not isinstance(test_result, dict):
+            return {"success": False, "error": "Invalid response format"}
+            
+        return test_result
+        
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Device test timeout")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Device test error: {str(e)}")
+
 # 遥操组相关API路由
 @app.get("/api/teleop-groups/types")
 async def get_teleop_group_types_info(node_id: int = Query(...)):
@@ -765,7 +850,7 @@ async def get_teleop_groups(
             description=row[3],
             type=row[4],
             config=config_data,
-            status=row[6] or 0,
+            status=row[6],
             created_at=row[7],
             updated_at=row[8]
         ))

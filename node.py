@@ -624,11 +624,10 @@ class Node:
 # 运行节点示例
 async def main():
     # 创建节点实例
-    # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc,matt")
-    # node = Node()
-    
+    node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc",mqtt_broker="121.43.162.224")
+    # node = Node(mqtt_broker="121.43.162.224")
     try:
-        node  = Node(mqtt_broker="121.43.162.224")
+        
         # 注册节点
         await node.register_node()
         
