@@ -1,12 +1,11 @@
-import sys
+import asyncio
 import threading
-import json
-import os
 import time
 import math
+from typing import Dict, Any, Tuple, Callable
 from scipy.spatial.transform import Rotation as R  # 需要安装 scipy
 
-class Teleoperation:
+class TeleopMiddleware:
     def __init__(self,left_wrist_controller = None,right_wrist_controller = None):
         # 用字典存储事件与回调的映射，格式: {事件名: [回调1, 回调2, ...]}
         self._events = {
@@ -34,27 +33,81 @@ class Teleoperation:
             "rightGripDown": self._default_callback,
             "rightGripTurnDown": self._default_callback,
             "rightGripTurnUp":self._default_callback,
+            "leftStick":self._default_callback,
+            "rightStick":self._default_callback,
         }
         
-    def on(self, event_name: str, callback):
-        """注册事件回调函数"""
-        # 如果事件不存在
-        if event_name not in self._events:
-            return
-        # 将回调函数添加到事件列表中
-        self._events[event_name] = callback
+    def on(self, event_name: str, callback: Callable = None) -> Callable:
+        """
+        注册事件回调函数 - 可作为装饰器或普通方法使用
+        :param event_name: 事件名称
+        :param callback: 回调函数（可选，当作为装饰器使用时不需要）
+        :return: 装饰器函数或注册结果
+        """
+        # 装饰器工厂模式
+        def decorator(func):
+            if not callable(func):
+                raise ValueError("回调函数必须是可调用对象")
+                
+            # 如果事件存在则更新回调
+            if event_name in self._events:
+                self._events[event_name] = func
+            else:
+                # 如果事件不存在，添加新的事件处理器
+                self._events[event_name] = func
+            return func
+        
+        # 如果提供了callback参数，则按照原来的方式工作
+        if callback is not None:
+            return decorator(callback)
+        
+        # 否则返回装饰器
+        return decorator
 
-    def off(self, event_name: str):
-        """移除事件回调函数"""
-        if event_name not in self._events:
-            return
-        self._events[event_name] = self._default_callback
+    def off(self, event_name: str) -> bool:
+        """
+        移除事件回调函数，恢复默认回调
+        :param event_name: 事件名称
+        """
+        if event_name in self._events:
+            self._events[event_name] = self._default_callback
+            return True
+        
+        return False
 
-    def emit(self, event_name: str, *args, **kwargs):
-        """触发事件，执行所有注册的回调函数"""
-        if event_name not in self._events:
-            return
-        self._events[event_name](*args, **kwargs)
+    def emit(self, event_name: str, *args, **kwargs) -> None:
+        """
+        触发事件，执行注册的回调函数
+        事件处理应是非阻塞的，对于耗时操作应该在独立线程中执行
+        :param event_name: 事件名称
+        :param args: 位置参数
+        :param kwargs: 关键字参数
+        """
+        if event_name in self._events:
+            try:
+                self._events[event_name](*args, **kwargs)
+                # # 异步执行回调函数以避免阻塞事件循环
+                # callback = self._events[event_name]
+                # if asyncio.iscoroutinefunction(callback):
+                #     # 如果是异步函数，在新事件循环中运行
+                #     thread = threading.Thread(target=self._run_async_callback, args=(callback, args, kwargs), daemon=True)
+                #     thread.start()
+                # else:
+                #     # 同步函数在新线程中运行以避免阻塞
+                #     thread = threading.Thread(target=callback, args=args, kwargs=kwargs, daemon=True)
+                #     thread.start()
+            except Exception as e:
+                self.emit("error", f"事件{event_name}执行失败: {str(e)}")
+
+    def _run_async_callback(self, callback, args, kwargs):
+        """运行异步回调函数"""
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(callback(*args, **kwargs))
+            loop.close()
+        except Exception as e:
+            self.emit("error", f"异步事件回调执行失败: {str(e)}")
         
     def _default_callback(self,*args, **kwargs):
         pass
@@ -194,6 +247,11 @@ class Teleoperation:
             for evt in trigger_events:
                 if data_dict.get(evt, False):
                     self.emit(evt)
+
+            if "leftStick" in data_dict:
+                self.emit("leftStick",data_dict["leftStick"])
+            if "rightStick" in data_dict:
+                self.emit("rightStick",data_dict["rightStick"])
 
         except Exception as e:
             debug_print(f"处理数据时出错: {e}", True)

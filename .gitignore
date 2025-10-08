@@ -12,5 +12,7 @@ wheels/
 *.yaml
 
 *.db
+*.txt
 
 datasets/*
+test/*

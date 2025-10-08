@@ -4,85 +4,582 @@ body {
   margin: 0;
   color: #222;
 }
-#app {
-  max-width: 900px;
-  margin: 30px auto;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
-  padding: 24px;
+
+/* 导航链接样式 */
+.nav-link.active {
+  background-color: #eff6ff;
+  color: #3b82f6;
 }
-header {
-  text-align: center;
-  margin-bottom: 24px;
+
+/* 页面切换样式 */
+.page.hidden {
+  display: none;
 }
-main section {
-  margin-bottom: 32px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid #eee;
+
+.page {
+  display: block;
 }
-h2 {
-  color: #1677ff;
-  margin-top: 0;
+
+/* 卡片样式 */
+.device-card, .teleop-card {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  transition: all 0.3s ease;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
 }
-fieldset {
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  margin-bottom: 12px;
-  padding: 12px;
+
+.device-card:hover, .teleop-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
-legend {
-  font-weight: bold;
-  color: #555;
+
+/* 卡片头部 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 15px;
 }
-input {
-  margin: 0 8px 8px 0;
-  padding: 6px 10px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
+
+.card-header h4 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: #1f2937;
 }
-button {
-  background: #1677ff;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 16px;
-  margin-top: 8px;
-  cursor: pointer;
-  transition: background 0.2s;
+
+/* 状态徽章样式 */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
 }
-button:hover {
-  background: #0056b3;
+
+.status-connected {
+  background-color: #dcfce7;
+  color: #16a34a;
 }
-/* 卡片式设备管理样式 */
-.device-card {
-  background: #f0f6ff;
-  border-radius: 8px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-  padding: 16px;
-  margin-bottom: 16px;
+
+.status-disconnected {
+  background-color: #fee2e2;
+  color: #dc2626;
+}
+
+.status-pending {
+  background-color: #fef3c7;
+  color: #d97706;
+}
+
+/* 设备状态样式 */
+.status {
   display: inline-block;
-  min-width: 220px;
-  vertical-align: top;
+  padding: 3px 10px;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 500;
 }
-.device-card button {
-  margin-right: 8px;
-  margin-top: 8px;
+
+.status.running {
+  background-color: #dcfce7;
+  color: #16a34a;
 }
-#add-device-modal {
-  min-width: 320px;
+
+.status.stopped {
+  background-color: #fee2e2;
+  color: #dc2626;
 }
-#teleop-log {
-  background: #f0f6ff;
-  border-radius: 4px;
-  padding: 10px;
-  min-height: 40px;
-  margin-top: 10px;
-  font-size: 14px;
-  color: #444;
+
+/* 卡片内容 */
+.card-body {
+  flex-grow: 1;
+  margin-bottom: 20px;
 }
-footer {
+
+.card-body p {
+  margin: 0 0 15px 0;
+  color: #6b7280;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 0.85rem;
+  color: #4b5563;
+}
+
+.details span {
+  display: block;
+}
+
+/* 卡片操作 */
+.card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.card-actions .start,
+.card-actions .stop,
+.card-actions .edit,
+.card-actions .delete {
+  flex: 1;
+  min-width: 60px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
   text-align: center;
-  margin-top: 24px;
-  color: #aaa;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.card-actions .start {
+  background-color: #10b981;
+  color: white;
+}
+
+.card-actions .start:hover {
+  background-color: #059669;
+}
+
+.card-actions .stop {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.card-actions .stop:hover {
+  background-color: #d97706;
+}
+
+.card-actions .edit {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.card-actions .edit:hover {
+  background-color: #2563eb;
+}
+
+.card-actions .delete {
+  background-color: #ef4444;
+  color: white;
+}
+
+.card-actions .delete:hover {
+  background-color: #dc2626;
+}
+
+/* 节点区域 */
+.node-section {
+  background: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+  padding: 20px;
+  margin-bottom: 24px;
+  border: 1px solid #e5e7eb;
+}
+
+.node-section h3 {
+  margin: 0 0 20px 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+/* 按钮样式 */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s;
+  border: none;
+  cursor: pointer;
+  gap: 6px;
+}
+
+.btn-primary {
+  background-color: #3b82f6;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #2563eb;
+}
+
+.btn-secondary {
+  background-color: #f3f4f6;
+  color: #374151;
+}
+
+.btn-secondary:hover {
+  background-color: #e5e7eb;
+}
+
+.btn-success {
+  background-color: #10b981;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #059669;
+}
+
+.btn-danger {
+  background-color: #ef4444;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #dc2626;
+}
+
+.btn-warning {
+  background-color: #f59e0b;
+  color: white;
+}
+
+.btn-warning:hover {
+  background-color: #d97706;
+}
+
+.add-device-btn {
+  padding: 8px 16px;
+  background-color: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.add-device-btn:hover {
+  background-color: #2563eb;
+}
+
+/* 表单元素样式 */
+input, select, textarea {
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 14px;
+  transition: border-color 0.2s;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+/* 开关样式 */
+input[type="checkbox"] + label {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 24px;
+  background-color: #d1d5db;
+  border-radius: 50px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+input[type="checkbox"] + label:before {
+  content: "";
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background-color: white;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.3s;
+}
+
+input[type="checkbox"]:checked + label {
+  background-color: #3b82f6;
+}
+
+input[type="checkbox"]:checked + label:before {
+  transform: translateX(16px);
+}
+
+/* 模态框样式 */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.3s ease;
+}
+
+.modal.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+.modal-content {
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  transform: translateY(-20px);
+  transition: transform 0.3s ease;
+}
+
+.modal.active .modal-content {
+  transform: translateY(0);
+}
+
+.modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.modal-body {
+  padding: 20px 24px;
+}
+
+.modal-footer {
+  padding: 16px 24px 20px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* 表格样式 */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.table th {
+  background-color: #f9fafb;
+  font-weight: 600;
+  color: #374151;
+}
+
+.table tbody tr:hover {
+  background-color: #f9fafb;
+}
+
+/* 响应式设计 */
+@media (max-width: 1024px) {
+  .grid-cols-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  #app {
+    flex-direction: column;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: auto;
+  }
+  
+  .main-content {
+    width: 100%;
+  }
+  
+  .device-card, .teleop-card {
+    margin-bottom: 15px;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .page-header .btn {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3 {
+    grid-template-columns: 1fr;
+  }
+  
+  .node-section {
+    padding: 16px;
+  }
+  
+  .node-section h3 {
+    font-size: 1.1rem;
+  }
+  
+  .card-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+  
+  .card-header h4 {
+    font-size: 1rem;
+  }
+  
+  .card-actions {
+    flex-direction: column;
+  }
+  
+  .card-actions .start,
+  .card-actions .stop,
+  .card-actions .edit,
+  .card-actions .delete {
+    width: 100%;
+  }
+  
+  .modal-content {
+    margin: 10px;
+    max-width: calc(100% - 20px);
+  }
+}
+
+@media (max-width: 480px) {
+  .node-section {
+    padding: 12px;
+  }
+  
+  .device-card, .teleop-card {
+    padding: 16px;
+  }
+  
+  .modal-header, .modal-body, .modal-footer {
+    padding: 16px;
+  }
+}
+
+/* 加载动画 */
+.loading {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid rgba(0, 0, 0, 0.1);
+  border-radius: 50%;
+  border-top-color: #3b82f6;
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* 空状态样式 */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b7280;
+}
+
+.empty-state .icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #d1d5db;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 16px;
+}
+
+/* 工具提示 */
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: 200px;
+  background-color: #374151;
+  color: #fff;
+  text-align: center;
+  border-radius: 6px;
+  padding: 8px;
+  position: absolute;
+  z-index: 1;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  font-size: 14px;
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* 表单字段 */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-weight: 500;
+  color: #374151;
+}
+
+.form-group .help-text {
+  margin-top: 6px;
+  font-size: 0.8rem;
+  color: #6b7280;
 }
