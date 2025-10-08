@@ -20,32 +20,32 @@ class DefaultTeleopGroup(BaseTeleopGroup):
         {
             "name": "left_arm",
             "description": "左臂设备",
-            "category": "robot"
+            "category": "Robot"
         },
         {
             "name": "right_arm", 
             "description": "右臂设备",
-            "category": "robot"
+            "category": "Robot"
         },
         {
             "name": "vr",
             "description": "VR设备",
-            "category": "vr"
+            "category": "VR"
         },
         {
             "name": "camera1",
             "description": "摄像头1",
-            "category": "camera"
+            "category": "Camera"
         },
         {
             "name": "camera2",
             "description": "摄像头2",
-            "category": "camera"
+            "category": "Camera"
         },
         {
             "name": "camera3",
             "description": "摄像头3",
-            "category": "camera"
+            "category": "Camera"
         }
     ]
 
@@ -93,7 +93,7 @@ class DefaultTeleopGroup(BaseTeleopGroup):
             self.running = True
             
             # 触发状态变化事件
-            self.emit("status_change", True)
+            self.emit("status_change", 1)
             return True
         except Exception as e:
             print(f"启动默认遥操组失败: {e}")
@@ -109,7 +109,6 @@ class DefaultTeleopGroup(BaseTeleopGroup):
             
             # 触发状态变化事件（停止前）
             self.running = False
-            self.emit("status_change", False)
             
             # 停止所有设备
             for device in self.devices:
@@ -120,6 +119,8 @@ class DefaultTeleopGroup(BaseTeleopGroup):
             self.data_collect.stop()
             
             # 需要等待数采后处理完毕
+            
+            self.emit("status_change", 0)
             
             self.devices.clear()
             return True

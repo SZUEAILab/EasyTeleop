@@ -1,7 +1,8 @@
-from fastapi import FastAPI, WebSocket, HTTPException, Query
+from fastapi import FastAPI, WebSocket, HTTPException, Query, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import sqlite3
 import json
@@ -25,6 +26,15 @@ DB_PATH = "EasyTeleop.db"
 node_websockets: Dict[int, WebSocketServerProtocol] = {}
 
 app = FastAPI()
+
+# 添加CORS中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 在生产环境中应该设置具体的域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # 初始化数据库表
 def init_tables():
@@ -164,6 +174,12 @@ class TeleopGroupResponse(BaseModel):
     status: int
     created_at: str
     updated_at: str
+
+class DeviceTestRequest(DeviceBase):
+    """
+    设备测试请求模型
+    """
+    node_id: int = Field(..., description="节点ID")
 
 # 存储等待响应的Future对象，key为websocket对象id和rpc_id的组合
 pending_responses: Dict[str, asyncio.Future] = {}
@@ -520,35 +536,35 @@ async def create_device(device: DeviceCreate):
         raise HTTPException(status_code=400, detail="Node not connected")
     
     # 对config进行测试，test成功才能创建设备
-    try:
-        # 直接发送RPC请求，不使用WebSocketRPC
-        websocket = node_websockets[device.node_id]
-        rpc_id = int(time.time() * 1000)
-        rpc_request = {
-            "jsonrpc": "2.0",
-            "method": "node.test_device",
-            "params": {
-                "category": device.category,
-                "type": device.type,
-                "config": device.config
-            },
-            "id": rpc_id
-        }
+    # try:
+    #     # 直接发送RPC请求，不使用WebSocketRPC
+    #     websocket = node_websockets[device.node_id]
+    #     rpc_id = int(time.time() * 1000)
+    #     rpc_request = {
+    #         "jsonrpc": "2.0",
+    #         "method": "node.test_device",
+    #         "params": {
+    #             "category": device.category,
+    #             "type": device.type,
+    #             "config": device.config
+    #         },
+    #         "id": rpc_id
+    #     }
         
-        # 发送请求
-        await websocket.send_text(json.dumps(rpc_request))
+    #     # 发送请求
+    #     await websocket.send_text(json.dumps(rpc_request))
         
-        # 等待并处理响应
-        test_result = await wait_for_response(websocket, rpc_id)
+    #     # 等待并处理响应
+    #     test_result = await wait_for_response(websocket, rpc_id)
         
-        # 检查测试结果，确保test_result是字典类型
-        if not isinstance(test_result, dict) or test_result.get("success") is not True:
-            error_msg = test_result.get("error", "Device test failed") if isinstance(test_result, dict) else "Device test failed"
-            raise HTTPException(status_code=400, detail=error_msg)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Device test timeout")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Device test error: {str(e)}")
+    #     # 检查测试结果，确保test_result是字典类型
+    #     if not isinstance(test_result, dict) or test_result.get("success") is not True:
+    #         error_msg = test_result.get("error", "Device test failed") if isinstance(test_result, dict) else "Device test failed"
+    #         raise HTTPException(status_code=400, detail=error_msg)
+    # except asyncio.TimeoutError:
+    #     raise HTTPException(status_code=504, detail="Device test timeout")
+    # except Exception as e:
+    #     raise HTTPException(status_code=500, detail=f"Device test error: {str(e)}")
     
     # 在数据库中创建设备
     conn = sqlite3.connect(DB_PATH)
@@ -598,36 +614,36 @@ async def update_device(device_id: int, device: DeviceUpdate):
             
         node_id = row[1]
         
-        # 对config进行测试，test成功才能更新设备
-        if node_id not in node_websockets:
-            raise HTTPException(status_code=400, detail="Node not connected")
+        # # 对config进行测试，test成功才能更新设备
+        # if node_id not in node_websockets:
+        #     raise HTTPException(status_code=400, detail="Node not connected")
         
-        try:
-            # 直接发送RPC请求，不使用WebSocketRPC
-            websocket = node_websockets[node_id]
-            rpc_id = int(time.time() * 1000)
-            rpc_request = {
-                "jsonrpc": "2.0",
-                "method": "node.test_device",
-                "params": {
-                    "category": device.category,
-                    "type": device.type,
-                    "config": device.config
-                },
-                "id": rpc_id
-            }
+        # try:
+        #     # 直接发送RPC请求，不使用WebSocketRPC
+        #     websocket = node_websockets[node_id]
+        #     rpc_id = int(time.time() * 1000)
+        #     rpc_request = {
+        #         "jsonrpc": "2.0",
+        #         "method": "node.test_device",
+        #         "params": {
+        #             "category": device.category,
+        #             "type": device.type,
+        #             "config": device.config
+        #         },
+        #         "id": rpc_id
+        #     }
             
-            # 发送请求
-            await websocket.send_text(json.dumps(rpc_request))
+        #     # 发送请求
+        #     await websocket.send_text(json.dumps(rpc_request))
             
-            # 等待并处理响应
-            test_result = await wait_for_response(websocket, rpc_id)
+        #     # 等待并处理响应
+        #     test_result = await wait_for_response(websocket, rpc_id)
             
-            # 检查测试结果，确保test_result是字典类型
-            if not isinstance(test_result, dict) or test_result.get("success") is not True:
-                raise HTTPException(status_code=400, detail="Device test failed")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Device test error: {str(e)}")
+        #     # 检查测试结果，确保test_result是字典类型
+        #     if not isinstance(test_result, dict) or test_result.get("success") is not True:
+        #         raise HTTPException(status_code=400, detail="Device test failed")
+        # except Exception as e:
+        #     raise HTTPException(status_code=500, detail=f"Device test error: {str(e)}")
         
         # 更新设备信息
         cursor.execute(
@@ -686,6 +702,64 @@ async def delete_device(device_id: int):
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         conn.close()
+
+@app.post("/api/devices/test", description="测试设备连接")
+async def test_device_connection(device_test_request: DeviceTestRequest):
+    """
+    测试设备连接
+    
+    该端点用于测试指定设备是否能成功连接。需要提供节点ID、设备类别、设备类型和设备配置参数。
+    
+    示例请求体:
+    {
+        "node_id": 1,
+        "category": "robot", 
+        "type": "RealMan",
+        "config": {
+            "ip": "192.168.1.100",
+            "port": 8080
+        }
+    }
+    """
+    node_id = device_test_request.node_id
+    category = device_test_request.category
+    type_name = device_test_request.type
+    config = device_test_request.config
+    # 验证节点是否存在且连接
+    if node_id not in node_websockets:
+        raise HTTPException(status_code=400, detail="Node not connected")
+    
+    try:
+        # 直接发送RPC请求，不使用WebSocketRPC
+        websocket = node_websockets[node_id]
+        rpc_id = int(time.time() * 1000)
+        rpc_request = {
+            "jsonrpc": "2.0",
+            "method": "node.test_device",
+            "params": {
+                "category": category,
+                "type": type_name,
+                "config": config
+            },
+            "id": rpc_id
+        }
+        
+        # 发送请求
+        await websocket.send_text(json.dumps(rpc_request))
+        
+        # 等待并处理响应
+        test_result = await wait_for_response(websocket, rpc_id)
+        
+        # 检查测试结果，确保test_result是字典类型
+        if not isinstance(test_result, dict) or test_result.get("success") is not True:
+            raise HTTPException(status_code=400, detail="Device test failed")
+            
+        return test_result
+        
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Device test timeout")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Device test error: {str(e)}")
 
 # 遥操组相关API路由
 @app.get("/api/teleop-groups/types")
@@ -765,7 +839,7 @@ async def get_teleop_groups(
             description=row[3],
             type=row[4],
             config=config_data,
-            status=row[6] or 0,
+            status=row[6],
             created_at=row[7],
             updated_at=row[8]
         ))
@@ -1175,6 +1249,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 # 保存WebSocket连接
                 node_websockets[node_id] = websocket
                 print(f"Node {node_id} connected and added to connection pool")
+                
+                # 更新数据库中节点的状态为在线(1)
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    cursor = conn.cursor()
+                    cursor.execute(
+                        "UPDATE nodes SET status = 1, updated_at = datetime('now') WHERE id = ?",
+                        (node_id,)
+                    )
+                    conn.commit()
+                    conn.close()
+                    print(f"Node {node_id} status updated to online in database")
+                except Exception as e:
+                    print(f"Failed to update node {node_id} status in database: {e}")
         
         # 继续处理后续消息
         while True:
@@ -1198,6 +1286,20 @@ async def websocket_endpoint(websocket: WebSocket):
         if node_id and node_id in node_websockets:
             del node_websockets[node_id]
             print(f"Node {node_id} disconnected and removed from connection pool")
+            
+            # 更新数据库中节点的状态为离线(0)
+            try:
+                conn = sqlite3.connect(DB_PATH)
+                cursor = conn.cursor()
+                cursor.execute(
+                    "UPDATE nodes SET status = 0, updated_at = datetime('now') WHERE id = ?",
+                    (node_id,)
+                )
+                conn.commit()
+                conn.close()
+                print(f"Node {node_id} status updated to offline in database")
+            except Exception as e:
+                print(f"Failed to update node {node_id} status in database: {e}")
 
 async def handle_jsonrpc_request(request: dict, websocket: WebSocket, node_id: int = None) -> dict:
     """处理JSON-RPC请求"""

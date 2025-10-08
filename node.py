@@ -218,10 +218,14 @@ class Node:
         teleop_group_instance = group_class(device_objects)
         
         # 注册遥操组状态变化回调
-        teleop_group_instance.on("status_change", self._on_teleop_group_status_change)
+        @teleop_group_instance.on("status_change")
+        def report_teleop_group_status(status_info, group_id=group_id):
+            self._report_teleop_group_status(group_id, status_info)
         
         # 注册数据采集状态变化回调
-        teleop_group_instance.data_collect.on("status_change", self._on_data_collect_status_change)
+        @teleop_group_instance.data_collect.on("status_change")
+        def report_data_collection_status(status_info, group_id=group_id):
+            self._report_teleop_group_collecting_status(group_id, status_info)
         
         # 启动遥操组
         success = teleop_group_instance.start()
@@ -269,8 +273,6 @@ class Node:
         if success:
             # 从遥操组池中移除实例
             del self.teleop_groups_pool[group_id]
-            # 上报遥操组状态变化
-            self._report_teleop_group_status(group_id, {"running": False, "collecting": False})
             return {"success": True, "message": f"Teleop group {group_id} stopped successfully"}
         else:
             return {"success": False, "message": f"Failed to stop teleop group {group_id}"}
@@ -573,48 +575,15 @@ class Node:
             # 上报启动状态
             status_topic = f"node/{self.node_id}/teleop-group/{group_id}/status"
             # 0-未启动, 1-已启动
-            status_payload = "1" if status.get('running', False) else "0"
-            self.mqtt_client.publish(status_topic, status_payload, qos=1, retain=True)
-            
+            self.mqtt_client.publish(status_topic, status, qos=1, retain=True)
+    def _report_teleop_group_collecting_status(self, group_id, status):
+        """上报遥操组数据采集状态到MQTT"""
+        if self.mqtt_client and self.node_id:
             # 上报采集状态
             collecting_topic = f"node/{self.node_id}/teleop-group/{group_id}/collecting"
             # 0-未采集, 1-采集中
-            collecting_payload = "1" if status.get('collecting', False) else "0"
-            self.mqtt_client.publish(collecting_topic, collecting_payload, qos=1, retain=True)
+            self.mqtt_client.publish(collecting_topic, status, qos=1, retain=True)
             
-    def _on_device_status_change(self, status_info):
-        """设备状态变化回调"""
-        # 查找发生变化的设备ID
-        for device_id, device_instance in self.devices_pool.items():
-            # 通过比较对象引用确定是哪个设备发生了状态变化
-            if device_instance == status_info.get("device_instance"):
-                # 上报设备状态变化
-                self._report_device_status(device_id, status_info["new_status"])
-                break
-                
-    def _on_teleop_group_status_change(self, status_info):
-        """遥操组状态变化回调"""
-        # 查找发生变化的遥操组ID
-        for group_id, group_instance in self.teleop_groups_pool.items():
-            if group_instance == status_info:
-                # 上报遥操组状态变化
-                self._report_teleop_group_status(group_id, group_instance.get_status())
-                break
-                
-    def _on_data_collect_status_change(self, status):
-        """数据采集状态变化回调"""
-        # 数据采集状态变化已由遥操组状态变化统一处理，无需单独上报
-        pass
-        
-    def _report_data_collection_status(self, status):
-        """上报数据采集状态到MQTT"""
-        if self.mqtt_client:
-            topic = f"node/{self.node_id}/data-collection/status"
-            payload = json.dumps({
-                "status": status,
-                "timestamp": time.time()
-            })
-            self.mqtt_client.publish(topic, payload)
             
     def _set_all_devices_offline(self):
         """将所有设备状态设置为离线"""
@@ -624,11 +593,10 @@ class Node:
 # 运行节点示例
 async def main():
     # 创建节点实例
-    # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc,matt")
-    # node = Node()
-    
+    # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc",mqtt_broker="121.43.162.224")
+    node = Node(mqtt_broker="121.43.162.224")
     try:
-        node  = Node(mqtt_broker="121.43.162.224")
+        
         # 注册节点
         await node.register_node()
         
