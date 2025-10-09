@@ -419,6 +419,7 @@ EasyTeleop 采用分布式架构设计，由 Go 后端服务和 Python Node 控�
     "type": "DefaultTeleopGroup",
     "config": [2,3,7,7,4,8],
     "status": 1,
+    "capture_state":0,
     "created_at": "2025-01-01T00:00:00",
     "updated_at": "2025-01-01T00:00:00"
   }
@@ -447,6 +448,7 @@ EasyTeleop 采用分布式架构设计，由 Go 后端服务和 Python Node 控�
   "type": "DefaultTeleopGroup",
   "config": [2,3,7,7,4,8],
   "status": 1,
+  "capture_state":0,
   "created_at": "2025-01-01T00:00:00",
   "updated_at": "2025-01-01T00:00:00"
 }
@@ -496,7 +498,8 @@ EasyTeleop 采用分布式架构设计，由 Go 后端服务和 Python Node 控�
   "description": "主操作组描述",
   "type": "DefaultTeleopGroup",
   "config": [2,3,7,7,4,9],
-  "status": 0
+  "status": 0,
+  "capture_state":0
 }
 ```
 

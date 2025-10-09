@@ -16,6 +16,17 @@ EasyTeleop 系统使用 SQLite 数据库来存储设备和遥操作组的配置�
 | created_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 更新时间 |
 
+vrs表
+单独为头显配置的表，主键为uuid
+
+| 字段名 | 类型 | 描述 |
+| --- | --- | --- |
+| uuid | VARCHAR(36) PRIMARY KEY | 头显自己生成的唯一uuid |
+| device_id | INTEGER NOT NULL | 设备ID |
+| created_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 更新时间 |
+| FOREIGN KEY(device_id) | REFERENCES devices(id) | 关联的设备id |
+
 ### devices 表
 
 存储设备信息。
@@ -47,6 +58,7 @@ EasyTeleop 系统使用 SQLite 数据库来存储设备和遥操作组的配置�
 | type | VARCHAR(50) NOT NULL | 遥操作组类型 |
 | config | TEXT NOT NULL | 遥操作组配置（JSON格式，包含设备ID列表） |
 | status | BOOLEAN DEFAULT 0 | 遥操作组状态 |
+| capture_status | BOOLEAN DEFAULT 0 | 采集状态 |
 | created_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 更新时间 |
 | FOREIGN KEY (node_id) | REFERENCES nodes (id) | 外键约束 |
@@ -56,7 +68,7 @@ EasyTeleop 系统使用 SQLite 数据库来存储设备和遥操作组的配置�
 数据库在系统启动时自动初始化，创建所需的表结构。
 
 ```python
-def init_device_tables(db_path):
+def init_tables(db_path):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
@@ -71,13 +83,24 @@ def init_device_tables(db_path):
         )
     ''')
     
+    # 创建VR表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS vrs(
+            uuid VARCHAR(36) PRIMARY KEY,
+            device_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+    
     # 创建 devices 表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             node_id INTEGER NOT NULL,
             name VARCHAR(20) NOT NULL,
-            describe TEXT NOT NULL,
+            description TEXT NOT NULL,
             category VARCHAR(20) NOT NULL,
             type VARCHAR(20) NOT NULL,
             config TEXT NOT NULL,
@@ -93,13 +116,14 @@ def init_device_tables(db_path):
         CREATE TABLE IF NOT EXISTS teleop_groups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             node_id INTEGER NOT NULL,
-            name VARCHAR(100) NOT NULL,
-            describe TEXT,
-            type VARCHAR(50) NOT NULL,
+            name VARCHAR(20) NOT NULL,
+            description TEXT,
+            type VARCHAR(20) NOT NULL,
             config TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             status BOOLEAN DEFAULT 0,
+            capture_status BOOLEAN DEFAULT 0,
             FOREIGN KEY (node_id) REFERENCES nodes (id)
         )
     ''')

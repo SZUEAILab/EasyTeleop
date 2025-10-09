@@ -37,11 +37,11 @@ app.add_middleware(
 )
 
 # 初始化数据库表
-def init_tables():
-    conn = sqlite3.connect(DB_PATH)
+def init_tables(db_path):
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
-    # 创建节点表
+    # 创建 nodes 表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS nodes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,13 +52,24 @@ def init_tables():
         )
     ''')
     
-    # 创建设备表
+    # 创建VR表
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS vrs(
+            uuid VARCHAR(36) PRIMARY KEY,
+            device_id INTEGER NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (device_id) REFERENCES devices(id)
+        )
+    ''')
+    
+    # 创建 devices 表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS devices (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             node_id INTEGER NOT NULL,
             name VARCHAR(20) NOT NULL,
-            description TEXT NOT NULL,
+            description TEXT,
             category VARCHAR(20) NOT NULL,
             type VARCHAR(20) NOT NULL,
             config TEXT NOT NULL,
@@ -69,18 +80,19 @@ def init_tables():
         )
     ''')
     
-    # 创建遥操组表
+    # 创建 teleop_groups 表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS teleop_groups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             node_id INTEGER NOT NULL,
             name VARCHAR(20) NOT NULL,
-            description TEXT NOT NULL,
+            description TEXT,
             type VARCHAR(20) NOT NULL,
             config TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             status BOOLEAN DEFAULT 0,
+            capture_status BOOLEAN DEFAULT 0,
             FOREIGN KEY (node_id) REFERENCES nodes (id)
         )
     ''')
@@ -161,6 +173,7 @@ class TeleopGroupInDB(TeleopGroupBase):
     id: int
     node_id: int
     status: int
+    capture_status: int
     created_at: str
     updated_at: str
 
@@ -172,6 +185,7 @@ class TeleopGroupResponse(BaseModel):
     type: str
     config: List[int]
     status: int
+    capture_status: int
     created_at: str
     updated_at: str
 
@@ -800,7 +814,7 @@ async def get_teleop_groups(
     cursor = conn.cursor()
     
     # 构造查询语句
-    query = """SELECT id, node_id, name, description, type, config, status, 
+    query = """SELECT id, node_id, name, description, type, config, status,capture_status, 
                       created_at, updated_at FROM teleop_groups"""
     params = []
     
@@ -840,8 +854,9 @@ async def get_teleop_groups(
             type=row[4],
             config=config_data,
             status=row[6],
-            created_at=row[7],
-            updated_at=row[8]
+            capture_status=row[7],
+            created_at=row[8],
+            updated_at=row[9]
         ))
         
     conn.close()
@@ -854,7 +869,7 @@ async def get_teleop_group(id: int):
     cursor = conn.cursor()
     
     cursor.execute(
-        """SELECT id, node_id, name, description, type, config, status, 
+        """SELECT id, node_id, name, description, type, config, status,capture_status, 
                   created_at, updated_at FROM teleop_groups WHERE id = ?""",
         (id,)
     )
@@ -878,49 +893,11 @@ async def get_teleop_group(id: int):
         description=row[3],
         type=row[4],
         config=config_data,
-        status=row[6] or 0,
-        created_at=row[7],
-        updated_at=row[8]
+        status=row[6],
+        capture_status=row[7],
+        created_at=row[8],
+        updated_at=row[9]
     )
-        
-    conn.close()
-    return teleop_group
-
-@app.get("/api/teleop-groups/{id}/status")
-async def get_teleop_group_status(id: int):
-    """获取遥操组状态"""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    
-    cursor.execute(
-        """SELECT id, node_id, name, description, type, config, status, 
-                  created_at, updated_at FROM teleop_groups WHERE id = ?""",
-        (id,)
-    )
-    
-    row = cursor.fetchone()
-    if not row:
-        raise HTTPException(status_code=404, detail="Teleop group not found")
-        
-    try:
-        config_data = json.loads(row[5]) if isinstance(row[5], str) else row[5]
-        # 确保config是列表类型
-        if not isinstance(config_data, list):
-            config_data = []
-    except:
-        config_data = []
-        
-    teleop_group = {
-        "id": row[0],
-        "node_id": row[1],
-        "name": row[2],
-        "description": row[3],
-        "type": row[4],
-        "config": config_data,
-        "status": row[6] or 0,
-        "created_at": row[7],
-        "updated_at": row[8]
-    }
         
     conn.close()
     return teleop_group
@@ -975,22 +952,12 @@ async def update_teleop_group(id: int, group: TeleopGroupUpdate):
             
         node_id = row[1]
         
-        # 更新遥操组信息
-        if group.status is not None:
-            # 如果提供了status，则更新status
-            cursor.execute(
-                """UPDATE teleop_groups SET name=?, description=?, type=?, config=?, status=?, updated_at=datetime('now') 
-                   WHERE id = ?""",
-                (group.name, group.description, group.type, json.dumps(group.config), 
-                 group.status, id)
-            )
-        else:
-            # 如果没有提供status，则不更新status
-            cursor.execute(
-                """UPDATE teleop_groups SET name=?, description=?, type=?, config=?, updated_at=datetime('now') 
-                   WHERE id = ?""",
-                (group.name, group.description, group.type, json.dumps(group.config), id)
-            )
+        # 如果没有提供status，则不更新status
+        cursor.execute(
+            """UPDATE teleop_groups SET name=?, description=?, type=?, config=?, updated_at=datetime('now') 
+                WHERE id = ?""",
+            (group.name, group.description, group.type, json.dumps(group.config), id)
+        )
         
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Teleop group not found")
@@ -1173,9 +1140,7 @@ async def notify_node_config_update(node_id: int):
         }
         
         try:
-            # 发送通知
-            if websocket.state.name != 'CLOSED':
-                await websocket.send_text(json.dumps(notification))
+            await websocket.send_text(json.dumps(notification))
         except Exception as e:
             print(f"通知Node {node_id} 更新配置失败: {e}")
 
@@ -1399,7 +1364,7 @@ async def root():
 # 启动时初始化数据库
 @app.on_event("startup")
 async def startup_event():
-    init_tables()
+    init_tables(DB_PATH)
 
 if __name__ == "__main__":
     import uvicorn
