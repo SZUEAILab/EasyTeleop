@@ -55,8 +55,10 @@ def init_tables(db_path):
     # 创建VR表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS vrs(
-            uuid VARCHAR(36) PRIMARY KEY,
-            device_id INTEGER NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid VARCHAR(36) UNIQUE NOT NULL,
+            device_id INTEGER,
+            info TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (device_id) REFERENCES devices(id)
@@ -194,6 +196,26 @@ class DeviceTestRequest(DeviceBase):
     设备测试请求模型
     """
     node_id: int = Field(..., description="节点ID")
+
+# VR相关模型
+class VRBase(BaseModel):
+    uuid: str
+    info: Optional[Dict[str, Any]] = None
+
+class VRCreate(VRBase):
+    pass
+
+class VRUpdate(BaseModel):
+    uuid: Optional[str] = None
+    device_id: Optional[int] = None
+    info: Optional[Dict[str, Any]] = None
+
+class VRResponse(VRBase):
+    id: int
+    device_id: Optional[int] = None
+    info: Optional[Dict[str, Any]] = None
+    created_at: str
+    updated_at: str
 
 # 存储等待响应的Future对象，key为websocket对象id和rpc_id的组合
 pending_responses: Dict[str, asyncio.Future] = {}
@@ -1126,6 +1148,152 @@ async def delete_teleop_group(id: int):
     finally:
         conn.close()
 
+@app.get("/api/vrs", response_model=List[VRResponse])
+async def get_vrs(uuid: Optional[str] = Query(None)):
+    """获取VR头显列表"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        if uuid:
+            cursor.execute(
+                "SELECT id, uuid, device_id, info, created_at, updated_at FROM vrs WHERE uuid = ?",
+                (uuid,)
+            )
+        else:
+            cursor.execute("SELECT id, uuid, device_id, info, created_at, updated_at FROM vrs")
+        
+        vrs = []
+        for row in cursor.fetchall():
+            try:
+                info_data = json.loads(row[3]) if isinstance(row[3], str) else row[3]
+            except:
+                info_data = {}
+                
+            vrs.append(VRResponse(
+                id=row[0],
+                uuid=row[1],
+                device_id=row[2],
+                info=info_data,
+                created_at=row[4],
+                updated_at=row[5]
+            ))
+            
+        return vrs
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.post("/api/vrs", status_code=201)
+async def create_vr(vr: VRCreate):
+    """创建VR头显记录"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        cursor.execute(
+            "INSERT INTO vrs (uuid, info) VALUES (?, ?)",
+            (vr.uuid, json.dumps(vr.info) if vr.info else "{}")
+        )
+        vr_id = cursor.lastrowid
+        conn.commit()
+        
+        return {"message": "头显已添加", "id": vr_id}
+    except sqlite3.IntegrityError as e:
+        conn.rollback()
+        if "UNIQUE constraint failed" in str(e):
+            raise HTTPException(status_code=409, detail="VR with this UUID already exists")
+        else:
+            raise HTTPException(status_code=500, detail=str(e))
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.put("/api/vrs/{id}")
+async def update_vr(id: int, vr: VRUpdate):
+    """更新VR头显配置"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        # 检查VR是否存在
+        cursor.execute("SELECT id FROM vrs WHERE id = ?", (id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="VR not found")
+        
+        # 构建更新语句
+        update_fields = []
+        params = []
+        
+        if vr.uuid is not None:
+            update_fields.append("uuid = ?")
+            params.append(vr.uuid)
+            
+        if vr.device_id is not None:
+            update_fields.append("device_id = ?")
+            params.append(vr.device_id)
+            
+        if vr.info is not None:
+            update_fields.append("info = ?")
+            params.append(json.dumps(vr.info))
+            
+        if not update_fields:
+            raise HTTPException(status_code=400, detail="No fields to update")
+            
+        update_fields.append("updated_at = datetime('now')")
+        params.append(id)
+        
+        query = f"UPDATE vrs SET {', '.join(update_fields)} WHERE id = ?"
+        cursor.execute(query, params)
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="VR not found")
+            
+        conn.commit()
+        
+        return {"message": "配置已更新"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
+@app.delete("/api/vrs/{id}")
+async def delete_vr(id: int):
+    """删除VR头显记录"""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    
+    try:
+        # 检查VR是否存在
+        cursor.execute("SELECT id FROM vrs WHERE id = ?", (id,))
+        row = cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="VR not found")
+        
+        # 删除VR记录
+        cursor.execute("DELETE FROM vrs WHERE id = ?", (id,))
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="VR not found")
+            
+        conn.commit()
+        
+        return {"message": "头显已删除"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        conn.close()
+
 # 通知相关函数
 async def notify_node_config_update(node_id: int):
     """通知Node更新配置"""
@@ -1365,6 +1533,7 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     init_tables(DB_PATH)
+
 
 if __name__ == "__main__":
     import uvicorn

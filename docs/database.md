@@ -21,8 +21,10 @@ vrs表
 
 | 字段名 | 类型 | 描述 |
 | --- | --- | --- |
-| uuid | VARCHAR(36) PRIMARY KEY | 头显自己生成的唯一uuid |
+| id | INTEGER PRIMARY KEY AUTOINCREMENT | 头显ID |
+| uuid | VARCHAR(36) UNIQUE NOT NULL | 头显自己生成的唯一uuid |
 | device_id | INTEGER NOT NULL | 设备ID |
+| info | TEXT NOT NULL | 头显上传的信息（JSON格式） |
 | created_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | TIMESTAMP DEFAULT CURRENT_TIMESTAMP | 更新时间 |
 | FOREIGN KEY(device_id) | REFERENCES devices(id) | 关联的设备id |
@@ -86,8 +88,10 @@ def init_tables(db_path):
     # 创建VR表
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS vrs(
-            uuid VARCHAR(36) PRIMARY KEY,
-            device_id INTEGER NOT NULL,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid VARCHAR(36) UNIQUE NOT NULL,
+            device_id INTEGER,
+            info TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (device_id) REFERENCES devices(id)
