@@ -7,6 +7,7 @@ import requests
 import time
 import logging
 import threading
+import websockets
 
 from Components import WebSocketRPC
 from Device import get_device_types, get_device_classes
@@ -430,33 +431,24 @@ class Node:
         """向后端注册节点"""
         node_uuid = self.get_or_create_node_uuid()
         
-        # 发送注册请求
-        register_data = {
-            "uuid": node_uuid
-        }
-        
         try:
-            response = requests.post(
-                f"{self.backend_url}/api/node",
-                json=register_data
-            )
+            # 通过WebSocket RPC发送注册请求
+            result = await self.websocket_rpc.call("backend.register", {
+                "uuid": node_uuid
+            })
             
-            if response.status_code == 201:
-                result = response.json()
-                self.node_id = result.get("id")
-                print(f"节点注册成功，ID: {self.node_id}")
-                
-                # 获取初始配置
-                await self._fetch_devices_config()
-                await self._fetch_teleop_groups_config()
-                
-                # 初始化设备
-                await self._initialize_devices()
-                
-                return result
-            else:
-                raise Exception(f"节点注册失败: {response.text}")
-                
+            self.node_id = result.get("id")
+            print(f"节点上线成功，ID: {self.node_id}")
+            
+            # 获取初始配置
+            await self._fetch_devices_config()
+            await self._fetch_teleop_groups_config()
+            
+            # 初始化设备
+            await self._initialize_devices()
+            
+            return result
+            
         except Exception as e:
             print(f"节点注册出错: {e}")
             raise
@@ -501,14 +493,6 @@ class Node:
         except Exception as e:
             print(f"获取遥操组配置出错: {e}")
             self.teleop_groups_config = []
-            
-    async def connect_to_backend(self):
-        """连接到后端"""
-        if not self.node_id:
-            raise Exception("节点未注册，请先调用register_node()")
-            
-        print("正在连接到后端...")
-        await self.websocket_rpc.connect(self.websocket_uri)
         
     def _setup_mqtt(self):
         """设置MQTT客户端"""
@@ -596,15 +580,19 @@ async def main():
     # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc",mqtt_broker="121.43.162.224")
     node = Node(mqtt_broker="121.43.162.224")
     try:
+        # 连接到后端
+        websocket = await websockets.connect(node.websocket_uri)
+        node.websocket_rpc.websocket = websocket
+        
+        task = asyncio.create_task(node.websocket_rpc._message_handler(websocket))
         
         # 注册节点
         await node.register_node()
         
         # 设置MQTT
         node._setup_mqtt()
-        
-        # 连接到后端
-        await node.connect_to_backend()
+
+        await task
         
     except KeyboardInterrupt:
         print("节点已停止")

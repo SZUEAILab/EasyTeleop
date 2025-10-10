@@ -225,11 +225,3 @@ class WebSocketRPC:
         """
         async with websockets.serve(self._message_handler, host, port):
             await asyncio.Future()  # 运行直到被中断
-
-    async def connect(self, uri: str):
-        """
-        连接到WebSocket服务器
-        :param uri: WebSocket服务器地址
-        """
-        websocket = await websockets.connect(uri)
-        await self._message_handler(websocket)

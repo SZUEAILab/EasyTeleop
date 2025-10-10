@@ -35,7 +35,11 @@ if __name__ == '__main__':
         teleop.on("buttonATurnDown",dc.toggle_capture_state)
         
         #注册回调函数
-        vrsocket.on("message",teleop.handle_socket_data)
+        # vrsocket.on("message",teleop.handle_socket_data)
+        @vrsocket.on("message")
+        def teleop_handle_socket_data(message):
+            print(message)
+            teleop.handle_socket_data(message)
 
         @dc.on("status_change")
         def print_status(state):

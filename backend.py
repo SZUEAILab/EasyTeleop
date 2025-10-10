@@ -1360,81 +1360,34 @@ async def websocket_endpoint(websocket: WebSocket):
     """处理Node的WebSocket连接"""
     await websocket.accept()
     
-    node_id = None
+    # 使用字典封装node_id，使其修改能传递到外层
+    connection_context = {"node_id": None}
     try:
-        # 建立连接后主动询问节点ID
-        rpc_request = {
-            "jsonrpc": "2.0",
-            "method": "node.get_node_id",
-            "params": {},
-            "id": int(time.time() * 1000)  # 使用时间戳作为请求ID
-        }
-        await websocket.send_text(json.dumps(rpc_request))
-        
-        # 等待节点响应
-        data = await websocket.receive_text()
-        message = json.loads(data)
-        
-        # 处理节点ID响应
-        if "id" in message and "result" in message and isinstance(message["result"], dict) and "id" in message["result"]:
-            node_id = message["result"]["id"]
-            if node_id:
-                # 保存WebSocket连接
-                node_websockets[node_id] = websocket
-                print(f"Node {node_id} connected and added to connection pool")
-                
-                # 更新数据库中节点的状态为在线(1)
-                try:
-                    conn = sqlite3.connect(DB_PATH)
-                    cursor = conn.cursor()
-                    cursor.execute(
-                        "UPDATE nodes SET status = 1, updated_at = datetime('now') WHERE id = ?",
-                        (node_id,)
-                    )
-                    conn.commit()
-                    conn.close()
-                    print(f"Node {node_id} status updated to online in database")
-                except Exception as e:
-                    print(f"Failed to update node {node_id} status in database: {e}")
-        
         # 继续处理后续消息
         while True:
             data = await websocket.receive_text()
+            print(f"Received message: {data}")
             message = json.loads(data)
             
             # 处理JSON-RPC请求
             if "method" in message:
-                response = await handle_jsonrpc_request(message, websocket, node_id)
+                response = await handle_jsonrpc_request(message, websocket, connection_context)
                 if response:
                     await websocket.send_text(json.dumps(response))
             
             # 处理JSON-RPC响应
             elif "id" in message and ("result" in message or "error" in message):
-                await handle_jsonrpc_response(message, node_id)
+                await handle_jsonrpc_response(message, connection_context["node_id"])
                 
     except Exception as e:
         print(f"WebSocket连接错误: {e}")
     finally:
         # 清理连接的节点
-        if node_id and node_id in node_websockets:
-            del node_websockets[node_id]
-            print(f"Node {node_id} disconnected and removed from connection pool")
-            
-            # 更新数据库中节点的状态为离线(0)
-            try:
-                conn = sqlite3.connect(DB_PATH)
-                cursor = conn.cursor()
-                cursor.execute(
-                    "UPDATE nodes SET status = 0, updated_at = datetime('now') WHERE id = ?",
-                    (node_id,)
-                )
-                conn.commit()
-                conn.close()
-                print(f"Node {node_id} status updated to offline in database")
-            except Exception as e:
-                print(f"Failed to update node {node_id} status in database: {e}")
+        if connection_context["node_id"] and connection_context["node_id"] in node_websockets:
+            del node_websockets[connection_context["node_id"]]
+            print(f"Node {connection_context['node_id']} disconnected and removed from connection pool")
 
-async def handle_jsonrpc_request(request: dict, websocket: WebSocket, node_id: int = None) -> dict:
+async def handle_jsonrpc_request(request: dict, websocket: WebSocket, connection_context: dict) -> dict:
     """处理JSON-RPC请求"""
     rpc_id = request.get("id")
     method = request.get("method")
@@ -1447,20 +1400,16 @@ async def handle_jsonrpc_request(request: dict, websocket: WebSocket, node_id: i
     
     try:
         # 处理Node提供的方法（node.开头的方法由Node实现，Backend调用）
-        if method == "node.register":
+        if method == "backend.register":
             # Node向Backend注册
             result = await handle_node_register(params, websocket)
             response["result"] = result
             # 更新node_id
             if isinstance(result, dict) and "id" in result:
-                node_id = result["id"]
+                connection_context["node_id"] = result["id"]
                 # 保存WebSocket连接
-                if node_id:
-                    node_websockets[node_id] = websocket
-        elif method == "node.test_device":
-            # Backend要求Node测试设备（响应）
-            result = await handle_node_test_device(params)
-            response["result"] = result
+                if connection_context["node_id"]:
+                    node_websockets[connection_context["node_id"]] = websocket
         else:
             response["error"] = {
                 "code": -32601,
@@ -1533,6 +1482,21 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     init_tables(DB_PATH)
+    from Components import MQTTStatusSync
+    sync_service = MQTTStatusSync(
+        db_path="EasyTeleop.db",
+        mqtt_broker="121.43.162.224",  # 修改为实际的MQTT服务器地址
+        mqtt_port=1883
+    )
+    
+    try:
+        # 启动同步服务
+        sync_service.start_sync()
+        print("MQTT状态同步服务已启动")
+            
+    except Exception as e:
+        print(f"MQTT状态同步服务运行出错: {str(e)}")
+        sync_service.stop_sync()
 
 
 if __name__ == "__main__":
