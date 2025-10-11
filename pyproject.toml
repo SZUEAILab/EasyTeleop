@@ -1,6 +1,9 @@
 [project]
 name = "EasyTeleop"
-version = "0.1.0"
+version = "0.2.0"
+authors = [                         # 作者信息（支持多人）
+  { name = "Chain Pray", email = "qianpurui@gmail.com" },
+]
 description = "Easy teleoperation tool for robotic arm"
 readme = "README.md"
 requires-python = ">=3.10"

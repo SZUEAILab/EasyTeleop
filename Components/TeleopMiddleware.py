@@ -6,7 +6,7 @@ from typing import Dict, Any, Tuple, Callable
 from scipy.spatial.transform import Rotation as R  # 需要安装 scipy
 
 class TeleopMiddleware:
-    def __init__(self,left_wrist_controller = None,right_wrist_controller = None):
+    def __init__(self):
         # 用字典存储事件与回调的映射，格式: {事件名: [回调1, 回调2, ...]}
         self._events = {
              "buttonAUp": self._default_callback,
@@ -170,96 +170,92 @@ class TeleopMiddleware:
         处理从 socket 接收到的数据，并根据事件字段触发回调
         """
         try:
-            # 提取左臂位置和旋转角度
-            left_pos = data_dict['leftPos']
-            left_rot = data_dict['leftRot']
-            left_quat = data_dict['leftQuat']
-            x_l, y_l, z_l = left_pos['x'], left_pos['y'], left_pos['z']
-            # roll_l, pitch_l, yaw_l = left_rot['x']*math.pi/180, left_rot['y']*math.pi/180, left_rot['z']*math.pi/180
-            quat_l = [left_quat['x'], left_quat['y'], left_quat['z'], left_quat['w']]
-            roll_l,pitch_l, yaw_l = euler_from_quaternion(quat_l)
-            # roll_l = -roll_l  # 翻转 pitch 角度
+            msg_type = data_dict['type']
+            payload = data_dict['payload']
+            if msg_type == 'controller':
+                # 提取左臂位置和旋转角度
+                left_pos = payload['leftPos']
+                left_rot = payload['leftRot']
+                left_quat = payload['leftQuat']
+                x_l, y_l, z_l = left_pos['x'], left_pos['y'], left_pos['z']
+                # roll_l, pitch_l, yaw_l = left_rot['x']*math.pi/180, left_rot['y']*math.pi/180, left_rot['z']*math.pi/180
+                quat_l = [left_quat['x'], left_quat['y'], left_quat['z'], left_quat['w']]
+                roll_l,pitch_l, yaw_l = euler_from_quaternion(quat_l)
+                # roll_l = -roll_l  # 翻转 pitch 角度
 
-            # 提取右臂位置和旋转角度
-            right_pos = data_dict['rightPos']
-            right_rot = data_dict['rightRot']
-            right_quat = data_dict['rightQuat']
-            x_r, y_r, z_r = right_pos['x'], right_pos['y'], right_pos['z']
-            # roll_r, pitch_r, yaw_r = right_rot['x']*math.pi/180, right_rot['y']*math.pi/180, right_rot['z']*math.pi/180
-            quat_r = [right_quat['x'], right_quat['y'], right_quat['z'], right_quat['w']]
-            roll_r,pitch_r, yaw_r = euler_from_quaternion(quat_r)
-            # roll_r = -roll_r  # 翻转 pitch 角度
+                # 提取右臂位置和旋转角度
+                right_pos = payload['rightPos']
+                right_rot = payload['rightRot']
+                right_quat = payload['rightQuat']
+                x_r, y_r, z_r = right_pos['x'], right_pos['y'], right_pos['z']
+                # roll_r, pitch_r, yaw_r = right_rot['x']*math.pi/180, right_rot['y']*math.pi/180, right_rot['z']*math.pi/180
+                quat_r = [right_quat['x'], right_quat['y'], right_quat['z'], right_quat['w']]
+                roll_r,pitch_r, yaw_r = euler_from_quaternion(quat_r)
+                # roll_r = -roll_r  # 翻转 pitch 角度
 
-            # 提取抓手状态
-            left_trigger = 1 - data_dict['leftTrigger']
-            right_trigger = 1 - data_dict['rightTrigger']
+                # 提取抓手状态
+                left_trigger = 1 - payload['leftTrigger']
+                right_trigger = 1 - payload['rightTrigger']
 
-            if (x_l == 0 and y_l == 0 and z_l == 0) : # the position missing, discared
-                debug_print("左手坐标为0，丢弃该条信息", True)
-            else:
-                if data_dict['leftGrip']==True:
-                    self.emit("leftGripDown",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
-                    # self.left_wrist_controller.start_control([x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
+                if (x_l == 0 and y_l == 0 and z_l == 0) : # the position missing, discared
+                    debug_print("左手坐标为0，丢弃该条信息", True)
+                    pass
                 else:
-                    self.emit("leftGripUp")
-                    # self.left_wrist_controller.stop_control()
-                        
-
-            
-            if x_r == 0 and y_r == 0 and z_r == 0:
-                debug_print("右手坐标为0，丢弃该条信息", True)
-            else:
-                if data_dict['rightGrip']==True:
-                    self.emit("rightGripDown",[x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
-                    # self.right_wrist_controller.start_control([x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
-                else:
-                    self.emit("rightGripUp")
-                    # self.right_wrist_controller.stop_control()
-
-
-        except Exception as e:
-            debug_print(f"处理数据时出错: {e}", True)
-
-        try:
-            # 状态类事件（Up/Down）
-            state_events = [
-                ("buttonA", "buttonADown", "buttonAUp"),
-                ("buttonB", "buttonBDown", "buttonBUp"),
-                ("buttonX", "buttonXDown", "buttonXUp"),
-                ("buttonY", "buttonYDown", "buttonYUp"),
-            ]
-            for field, down_evt, up_evt in state_events:
-                if field in data_dict:
-                    if data_dict[field]:
-                        self.emit(down_evt)
+                    if payload['leftGrip']==True:
+                        self.emit("leftGripDown",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
                     else:
-                        self.emit(up_evt)
+                        self.emit("leftGripUp")
+                
+                if x_r == 0 and y_r == 0 and z_r == 0:
+                    debug_print("右手坐标为0，丢弃该条信息", True)
+                    pass
+                else:
+                    if payload['rightGrip']==True:
+                        self.emit("rightGripDown",[x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
+                    else:
+                        self.emit("rightGripUp")
 
-            # 触发类事件（TurnDown/TurnUp等，只在True时触发）
-            trigger_events = [
-                "buttonATurnDown", "buttonATurnUp",
-                "buttonBTurnDown", "buttonBTurnUp",
-                "buttonXTurnDown", "buttonXTurnUp",
-                "buttonYTurnDown", "buttonYTurnUp",
-                "rightGripTurnDown", "rightGripTurnUp",
-                "leftGripTurnDown", "leftGripTurnUp"
-            ]
-            for evt in trigger_events:
-                if data_dict.get(evt, False):
-                    self.emit(evt)
+                # 状态类事件（Up/Down）
+                state_events = [
+                    ("buttonA", "buttonADown", "buttonAUp"),
+                    ("buttonB", "buttonBDown", "buttonBUp"),
+                    ("buttonX", "buttonXDown", "buttonXUp"),
+                    ("buttonY", "buttonYDown", "buttonYUp"),
+                ]
+                for field, down_evt, up_evt in state_events:
+                    if field in payload:
+                        if payload[field]:
+                            self.emit(down_evt)
+                        else:
+                            self.emit(up_evt)
 
-            if "leftStick" in data_dict:
-                self.emit("leftStick",data_dict["leftStick"])
-            if "rightStick" in data_dict:
-                self.emit("rightStick",data_dict["rightStick"])
+                # 触发类事件（TurnDown/TurnUp等，只在True时触发）
+                trigger_events = [
+                    "buttonATurnDown", "buttonATurnUp",
+                    "buttonBTurnDown", "buttonBTurnUp",
+                    "buttonXTurnDown", "buttonXTurnUp",
+                    "buttonYTurnDown", "buttonYTurnUp",
+                    "rightGripTurnDown", "rightGripTurnUp",
+                    "leftGripTurnDown", "leftGripTurnUp"
+                ]
+                for evt in trigger_events:
+                    if payload.get(evt, False):
+                        self.emit(evt)
+
+                if "leftStick" in payload:
+                    self.emit("leftStick",payload["leftStick"])
+                if "rightStick" in payload:
+                    self.emit("rightStick",payload["rightStick"])
+            elif msg_type == 'hand':
+                leftHand = payload['leftHand']
+                rightHand = payload['rightHand']
+                if leftHand['isTracked']:
+                    self.emit("leftHand",leftHand)
+                if rightHand['isTracked']:
+                    self.emit("rightHand",rightHand)   
 
         except Exception as e:
             debug_print(f"处理数据时出错: {e}", True)
-    
-
-
-
-    
 
 DEBUG = False
 

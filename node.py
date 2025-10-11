@@ -415,6 +415,18 @@ class Node:
         
         print("所有设备初始化完成")
         
+    def _set_all_devices_offline(self):
+        """将所有设备状态设置为离线"""
+        for device_id in self.devices_pool:
+            self._report_device_status(device_id, 0)
+            
+    def _set_all_teleop_groups_offline(self):
+        """将所有遥操组状态设置为未启动"""
+        for group_config in self.teleop_groups_config:
+            group_id = group_config.get("id")
+            self._report_teleop_group_status(group_id, "0")  # 0-未启动
+            self._report_teleop_group_collecting_status(group_id, "0")  # 0-未采集
+            
     def get_or_create_node_uuid(self) -> str:
         """获取或创建节点UUID"""
         uuid_file = "node_uuid.txt"
@@ -577,8 +589,8 @@ class Node:
 # 运行节点示例
 async def main():
     # 创建节点实例
-    # node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc",mqtt_broker="121.43.162.224")
-    node = Node(mqtt_broker="121.43.162.224")
+    node = Node(backend_url="http://121.43.162.224:8000", websocket_uri="ws://121.43.162.224:8000/ws/rpc",mqtt_broker="121.43.162.224")
+    # node = Node(mqtt_broker="121.43.162.224")
     try:
         # 连接到后端
         websocket = await websockets.connect(node.websocket_uri)
@@ -591,6 +603,12 @@ async def main():
         
         # 设置MQTT
         node._setup_mqtt()
+
+        # 在设备初始化完成后，将所有设备状态置为0
+        node._set_all_devices_offline()
+        
+        # 将所有遥操组状态置为0
+        node._set_all_teleop_groups_offline()
 
         await task
         

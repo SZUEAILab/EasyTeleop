@@ -38,7 +38,7 @@ if __name__ == '__main__':
         # vrsocket.on("message",teleop.handle_socket_data)
         @vrsocket.on("message")
         def teleop_handle_socket_data(message):
-            print(message)
+            # print(message)
             teleop.handle_socket_data(message)
 
         @dc.on("status_change")
