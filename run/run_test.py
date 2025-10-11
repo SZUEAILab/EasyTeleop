@@ -2,7 +2,7 @@ import sys
 import os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from Components.TeleopMiddleware import TeleopMiddleware
+from Components import TeleopMiddleware,HandVisualizer
 from Components.DataCollect import DataCollect
 from Device.VR.VRSocket import VRSocket
 from Device.Robot.TestRobot import TestRobot
@@ -11,10 +11,11 @@ import time
 
 if __name__ == '__main__':
     try:
+        visualizer = HandVisualizer()
         dc = DataCollect()
         l_arm = TestRobot({"fps": 30})
         r_arm = TestRobot({"fps": 30})
-        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         # camera1 = RealSenseCamera({"serial":"153122070447","target_fps": 30}) 
         camera1 = TestCamera({"fps": 30})
@@ -39,6 +40,8 @@ if __name__ == '__main__':
         @vrsocket.on("message")
         def teleop_handle_socket_data(message):
             # print(message)
+            if message['type'] == "hand":
+                visualizer.add_data(message['payload'])
             teleop.handle_socket_data(message)
 
         @dc.on("status_change")
@@ -50,6 +53,8 @@ if __name__ == '__main__':
         l_arm.start()
         r_arm.start()
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响
+
+        visualizer.start()
         
         while(1):
             connect_states = [device.get_conn_status() for device in devices]
