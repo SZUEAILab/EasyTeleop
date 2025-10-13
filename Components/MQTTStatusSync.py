@@ -63,11 +63,11 @@ class MQTTStatusSync:
         else:
             logger.error(f"MQTT连接失败，错误代码: {rc}")
             
-    def _on_disconnect(self, client, userdata, rc, properties=None):
+    def _on_disconnect(self, client, userdata, flags, reason_code, properties=None):
         """
         MQTT断开连接回调函数
         """
-        logger.warning(f"MQTT连接断开，错误代码: {rc}")
+        logger.warning(f"MQTT连接断开，错误代码: {reason_code}")
             
     def _on_message(self, client, userdata, msg):
         """

@@ -12,7 +12,9 @@ class Visualizer:
     def __init__(self):
         self.fig = plt.figure()
         self.ax = self.fig.add_subplot(111, projection='3d')
-        self.data_queue = Queue()
+        # 将原来的data_queue分成左手和右手两个队列
+        self.left_data_queue = Queue()
+        self.right_data_queue = Queue()
         self.left_pos = np.array([0, 0, 0])
         self.right_pos = np.array([0, 0, 0])
         self.left_rot = np.array([0, 0, 0])  # 欧拉角 [x,y,z]
@@ -72,7 +74,8 @@ class Visualizer:
             x, y, z, w = q
         # 四元数归一化
         norm = np.sqrt(x*x + y*y + z*z + w*w)
-        x, y, z, w = x/norm, y/norm, z/norm, w/norm
+        if norm > 0:
+            x, y, z, w = x/norm, y/norm, z/norm, w/norm
         R = np.array([
             [1-2*(y**2+z**2), 2*(x*y-z*w),   2*(x*z+y*w)],
             [2*(x*y+z*w),     1-2*(x**2+z**2), 2*(y*z-x*w)],
@@ -94,22 +97,34 @@ class Visualizer:
             axis.set_data([start[0], end[0]], [start[1], end[1]])
             axis.set_3d_properties([start[2], end[2]])
 
+    def is_quaternion(self, rotation_data):
+        """判断是四元数还是欧拉角"""
+        if isinstance(rotation_data, dict):
+            # 如果包含'w'键，则认为是四元数
+            return 'w' in rotation_data
+        elif isinstance(rotation_data, (list, tuple)) and len(rotation_data) == 4:
+            # 如果是长度为4的列表或元组，则认为是四元数
+            return True
+        else:
+            # 否则认为是欧拉角
+            return False
+
     def update(self, frame):
-        while not self.data_queue.empty():
-            data = self.data_queue.get()
-            self.left_pos = np.array([data['leftPos']['x'], data['leftPos']['y'], data['leftPos']['z']])
-            self.right_pos = np.array([data['rightPos']['x'], data['rightPos']['y'], data['rightPos']['z']])
-            # 优先使用四元数
-            if 'leftQuat' in data and 'rightQuat' in data:
-                self.left_rot = data['leftQuat']
-                self.right_rot = data['rightQuat']
-                self.left_is_quat = True
-                self.right_is_quat = True
-            else:
-                self.left_rot = np.array([data['leftRot']['x'], data['leftRot']['y'], data['leftRot']['z']])
-                self.right_rot = np.array([data['rightRot']['x'], data['rightRot']['y'], data['rightRot']['z']])
-                self.left_is_quat = False
-                self.right_is_quat = False
+        # 处理左手队列数据
+        while not self.left_data_queue.empty():
+            data = self.left_data_queue.get()
+            self.left_pos = np.array([data['position']['x'], data['position']['y'], data['position']['z']])
+            # 判断是否为四元数
+            self.left_is_quat = self.is_quaternion(data['rotation'])
+            self.left_rot = data['rotation']
+
+        # 处理右手队列数据
+        while not self.right_data_queue.empty():
+            data = self.right_data_queue.get()
+            self.right_pos = np.array([data['position']['x'], data['position']['y'], data['position']['z']])
+            # 判断是否为四元数
+            self.right_is_quat = self.is_quaternion(data['rotation'])
+            self.right_rot = data['rotation']
 
         # 更新控制器位置
         self.left_point._offsets3d = (self.left_pos[0:1], self.left_pos[1:2], self.left_pos[2:3])
@@ -121,8 +136,11 @@ class Visualizer:
 
         return self.left_point, self.right_point
 
-    def add_data(self, data):
-        self.data_queue.put(data)
+    def add_left_data(self, data):
+        self.left_data_queue.put(data)
+
+    def add_right_data(self, data):
+        self.right_data_queue.put(data)
 
     def start(self):
         ani = FuncAnimation(self.fig, self.update, interval=50, 

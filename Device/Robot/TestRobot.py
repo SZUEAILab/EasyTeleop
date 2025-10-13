@@ -10,7 +10,8 @@ class TestRobot(BaseRobot):
     need_config = {
         "fps": {
             "description": "状态更新帧率",
-            "type": "int"
+            "type": "int",
+            "default": 30
         }
     }
     
