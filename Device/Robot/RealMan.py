@@ -4,6 +4,7 @@ import numpy as np
 import threading
 from threading import Lock
 from typing import Dict, Any
+from queue import Queue
 from .BaseRobot import BaseRobot
 
 class RealMan(BaseRobot):
@@ -59,6 +60,9 @@ class RealMan(BaseRobot):
         self.gripper_close = False
         self.delta = [0, 0, 0 , 0 , 0 , 0]
         
+        # 控制线程
+        self.control_thread = None
+        self.control_thread_running = False
         
     
 
@@ -169,31 +173,74 @@ class RealMan(BaseRobot):
         with self.state_lock:
             return self.current_gripper_state
     
-    def start_control(self, state, trigger=None):
-        """开始控制手臂，自动判断欧拉角或四元数"""
-
-        if self.is_controlling is False:
+    def start_control(self, state=None, trigger=None):
+        """开始控制手臂，启动控制线程"""
+        if not self.is_controlling:
             self.is_controlling = True
-            self.prev_tech_state = state
-            self.arm_first_state = self.get_state()
-            self.delta = [0, 0, 0, 0, 0, 0, 0]
+            self.control_thread_running = True
+            
+            # 启动控制线程
+            self.control_thread = threading.Thread(target=self._control_loop, daemon=True)
+            self.control_thread.start()
+            
             print("[Control] Control started.")
-        else:
-            if len(state) == 6:
-                self.move(state)
-            elif len(state) == 7:
-                self.moveq(state)
-            if trigger is not None:
-                self.set_gripper(trigger)
 
     def stop_control(self):
+        """停止控制手臂"""
         if self.is_controlling:
             self.is_controlling = False
+            self.control_thread_running = False
+            
+            # 等待控制线程结束
+            if self.control_thread and self.control_thread.is_alive():
+                self.control_thread.join(timeout=1.0)
+
+            # 清空队列
+            while not self.pose_queue.empty():
+                self.pose_queue.get()  # 取出并删除元素
+            while not self.gripper_queue.empty():
+                self.gripper_queue.get()
+            
             self.arm_first_state = None
             self.prev_tech_state = None
             print("[Control] Control stopped.")
+    def _control_loop(self):
+        """控制线程主循环"""
+        while self.control_thread_running:
+            # 处理位姿队列
+            while not self.pose_queue.empty():
+                pose_data = self.pose_queue.get()
+                if self.prev_tech_state is None:
+                    # 初始化状态
+                    self.prev_tech_state = pose_data
+                    self.arm_first_state = self.get_state()
+                    self.delta = [0, 0, 0, 0, 0, 0, 0]
+                else:
+                    # 执行位姿控制
+                    if len(pose_data) == 6:
+                        self.move(pose_data)
+                    elif len(pose_data) == 7:
+                        self.moveq(pose_data)
+            
+            # 处理夹爪队列
+            while not self.gripper_queue.empty():
+                gripper_data = self.gripper_queue.get()
+                self.set_gripper(gripper_data)
+            
+            time.sleep(0.01)  # 控制循环频率
+
+    def add_pose_data(self, pose_data):
+        """向位姿队列添加数据"""
+        if self.is_controlling:
+            self.pose_queue.put(pose_data)
+
+    def add_gripper_data(self, gripper_data):
+        """向夹爪队列添加数据"""
+        if self.is_controlling:
+            self.gripper_queue.put(gripper_data)
+
     def move(self, tech_state):
-         
+        """欧拉角控制"""
         self.delta[0] = tech_state[0] - self.prev_tech_state[0]
         self.delta[1] = tech_state[1] - self.prev_tech_state[1]
         self.delta[2] = tech_state[2] - self.prev_tech_state[2]

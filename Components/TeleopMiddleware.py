@@ -9,7 +9,7 @@ class TeleopMiddleware:
     def __init__(self):
         # 用字典存储事件与回调的映射，格式: {事件名: [回调1, 回调2, ...]}
         self._events = {
-             "buttonAUp": self._default_callback,
+            "buttonAUp": self._default_callback,
             "buttonADown": self._default_callback,
             "buttonATurnDown": self._default_callback,
             "buttonATurnUp": self._default_callback,
@@ -35,6 +35,12 @@ class TeleopMiddleware:
             "rightGripTurnUp":self._default_callback,
             "leftStick":self._default_callback,
             "rightStick":self._default_callback,
+            "leftTrigger": self._default_callback,
+            "rightTrigger": self._default_callback,
+            "leftPosRot": self._default_callback,
+            "rightPosRot": self._default_callback,
+            "leftPosQuat": self._default_callback,
+            "rightPosQuat": self._default_callback,
         }
         
     def on(self, event_name: str, callback: Callable = None) -> Callable:
@@ -197,23 +203,30 @@ class TeleopMiddleware:
                 left_trigger = 1 - payload['leftTrigger']
                 right_trigger = 1 - payload['rightTrigger']
 
+                self.emit("leftTrigger",left_trigger)
+                self.emit("rightTrigger",right_trigger)
+
                 if (x_l == 0 and y_l == 0 and z_l == 0) : # the position missing, discared
                     debug_print("左手坐标为0，丢弃该条信息", True)
                     pass
                 else:
-                    if payload['leftGrip']==True:
-                        self.emit("leftGripDown",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
-                    else:
-                        self.emit("leftGripUp")
+                    self.emit("leftPosRot",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l])
+                    self.emit("leftPosQuat", [x_l, y_l, z_l, quat_l[0], quat_l[1], quat_l[2], quat_l[3]])
+                    # if payload['leftGrip']==True:
+                    #     self.emit("leftGripDown",[x_l, y_l, z_l, roll_l, pitch_l, yaw_l],left_trigger)
+                    # else:
+                    #     self.emit("leftGripUp")
                 
                 if x_r == 0 and y_r == 0 and z_r == 0:
                     debug_print("右手坐标为0，丢弃该条信息", True)
                     pass
                 else:
-                    if payload['rightGrip']==True:
-                        self.emit("rightGripDown",[x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
-                    else:
-                        self.emit("rightGripUp")
+                    self.emit("rightPosRot",[x_r, y_r, z_r, roll_r, pitch_r, yaw_r])
+                    self.emit("rightPosQuat", [x_r, y_r, z_r, quat_r[0], quat_r[1], quat_r[2], quat_r[3]])
+                    # if payload['rightGrip']==True:
+                    #     self.emit("rightGripDown",[x_r, y_r, z_r, roll_r, pitch_r, yaw_r],right_trigger)
+                    # else:
+                    #     self.emit("rightGripUp")
 
                 # 状态类事件（Up/Down）
                 state_events = [

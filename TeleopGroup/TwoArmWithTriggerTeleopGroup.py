@@ -6,20 +6,25 @@ import logging
 # 创建日志记录器
 logger = logging.getLogger(__name__)
 
-class SingleArmTeleopGroup(BaseTeleopGroup):
-    """默认遥操组类型，支持双臂+VR+3摄像头的标准配置"""
+class TwoArmWithTriggerTeleopGroup(BaseTeleopGroup):
+    """支持双臂+VR+3摄像头的标准配置,启用夹爪控制,A键切换采集状态,摄像头可以留空"""
     
     # 遥操组类型名称
-    name = "单臂遥操组"
+    name = "双臂+夹爪+3摄像头遥操组"
     
     # 遥操组类型描述
-    description = "单臂+VR+2摄像头的配置，默认使用左手柄操作,A键切换采集状态"
+    description = "支持双臂+VR+3摄像头的标准配置,启用夹爪控制,A键切换采集状态,摄像头可以留空"
     
     # 遥操组所需配置字段
     need_config = [
         {
-            "name": "main_arm",
-            "description": "手臂",
+            "name": "left_arm",
+            "description": "左臂设备",
+            "category": "Robot"
+        },
+        {
+            "name": "right_arm", 
+            "description": "右臂设备",
             "category": "Robot"
         },
         {
@@ -35,6 +40,11 @@ class SingleArmTeleopGroup(BaseTeleopGroup):
         {
             "name": "camera2",
             "description": "摄像头2",
+            "category": "Camera"
+        },
+        {
+            "name": "camera3",
+            "description": "摄像头3",
             "category": "Camera"
         }
     ]
@@ -55,20 +65,29 @@ class SingleArmTeleopGroup(BaseTeleopGroup):
             self.teleop.on("buttonATurnDown", self.data_collect.toggle_capture_state)
             # 注册数据采集状态变化回调
             # self.data_collect.on("status_change",None)
-            print(f"当前遥操组设备: {self.devices}")
             
             # 注册回调函数
             if self.devices[0]:
-                self.teleop.on("rightGripDown",self.devices[0].start_control)
-                self.teleop.on("rightGripUp",self.devices[0].stop_control)
+                self.teleop.on("leftGripTurnDown",self.devices[0].start_control)
+                self.teleop.on("leftGripTurnUp",self.devices[0].stop_control)
+                self.teleop.on("leftTrigger",self.devices[0].add_gripper_data)
+                self.teleop.on("leftPosRot",self.devices[0].add_pose_data)
                 self.devices[0].on("state", self.data_collect.put_robot_state)
+            if self.devices[1]:
+                self.teleop.on("rightGripTurnDown",self.devices[1].start_control)
+                self.teleop.on("rightGripTurnUp",self.devices[1].stop_control)
+                self.teleop.on("rightTrigger",self.devices[1].add_gripper_data)
+                self.teleop.on("rightPosRot",self.devices[1].add_pose_data)
+                self.devices[1].on("state", self.data_collect.put_robot_state)
 
-            self.devices[1].on("message",self.teleop.handle_socket_data)
+            self.devices[2].on("message",self.teleop.handle_socket_data)
 
-            if self.devices[2]:
-                self.devices[2].on("frame",self.data_collect.put_video_frame)
             if self.devices[3]:
                 self.devices[3].on("frame",self.data_collect.put_video_frame)
+            if self.devices[4]:
+                self.devices[4].on("frame",self.data_collect.put_video_frame)
+            if self.devices[5]:
+                self.devices[5].on("frame",self.data_collect.put_video_frame)
             
             # 启动所有设备
             for device in self.devices:
@@ -81,16 +100,16 @@ class SingleArmTeleopGroup(BaseTeleopGroup):
             self.emit("status_change", 1)
             return True
         except Exception as e:
-            print(f"启动单臂遥操组失败: {e}")
+            print(f"启动默认遥操组失败: {e}")
             return False
 
     def stop(self) -> bool:
         """
-        停止单臂遥操组
+        停止默认遥操组
         :return: 是否停止成功
         """
         try:
-            print("停止单臂遥操组")
+            print("停止默认遥操组")
             
             # 触发状态变化事件（停止前）
             self.running = False
@@ -110,5 +129,5 @@ class SingleArmTeleopGroup(BaseTeleopGroup):
             self.devices.clear()
             return True
         except Exception as e:
-            print(f"停止单臂遥操组失败: {e}")
+            print(f"停止默认遥操组失败: {e}")
             return False

@@ -17,19 +17,23 @@ import math
 if __name__ == '__main__':
     try:
         l_arm = RealMan({"ip": "192.168.0.17", "port": 8080})
-        l_hand = Revo2OnRealMan({"ip": "192.168.0.17", "port": 8080,"baudrate":460800, "address": 126}) 
-        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
+        l_hand = Revo2OnRealMan({"ip": "192.168.0.17", "port": 8080,"baudrate":460800, "address": 127}) 
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         
         
         devices = [l_arm, l_hand, vrsocket]
         
         # 注册回调函数
-        @teleop.on("leftGripDown")
-        def control_l_arm_hand(state,trigger):
-            l_arm.start_control(state)
+        @teleop.on("leftPosRot")
+        def control_l_arm(move):
+            l_arm.add_pose_data(move)
+        teleop.on("leftGripTurnDown",l_arm.start_control)
+        teleop.on("leftGripTurnUp",l_arm.stop_control)
+        @teleop.on("leftTrigger")
+        def control_l_arm_hand(trigger):
+            l_arm.add_gripper_data(trigger)
             print(f"触发器原始值: {trigger}")
-            trigger = math.pow(trigger, 3) # 开方曲线更符合手指弯曲感觉
             trigger = int((1-trigger)*100) #限制在0-1之间
             print(f"触发器: {trigger}")
             
@@ -39,7 +43,7 @@ if __name__ == '__main__':
             l_hand.fingers["middle"] = int(trigger)
             l_hand.fingers["ring"] = int(trigger*0.9)
             l_hand.fingers["little"] = int(trigger*0.8)
-        teleop.on("leftGripUp",l_arm.stop_control)
+        
 
         @teleop.on("leftStick")
         def stick_callback(state):

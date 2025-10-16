@@ -32,6 +32,12 @@ class TestRobot(BaseRobot):
         self._arm_first_state = None
         self._prev_tech_state = None
 
+    def add_pose_data(self, pose_data):
+        pass
+    
+    def add_gripper_data(self, gripper_data):
+        pass
+
     def set_config(self, config):
         """设置设备配置"""
         super().set_config(config)
@@ -95,37 +101,8 @@ class TestRobot(BaseRobot):
 
     def start_control(self, state, trigger=None):
         """开始控制机器人"""
-        with self._control_lock:
-            if not self._control_active:
-                self._control_active = True
-                self._prev_tech_state = state
-                self._arm_first_state = copy.deepcopy(self._robot_state)
-                print("[Control] Test robot control started.")
-            else:
-                # 模拟控制过程，更新机器人状态
-                if len(state) == 6:
-                    # 欧拉角控制
-                    # 计算位移增量
-                    delta = [state[i] - self._prev_tech_state[i] for i in range(6)]
-                    
-                    # 更新机器人状态（简化模拟）
-                    for i in range(min(3, len(self._cartesian_position))):
-                        self._cartesian_position[i] += delta[i]
-                    
-                    for i in range(min(3, len(self._cartesian_orientation))):
-                        self._cartesian_orientation[i] += delta[i+3]
-                
-                # 更新夹爪状态
-                if trigger is not None:
-                    self._gripper_state = trigger
-                    
-                self._prev_tech_state = state
+        pass
 
     def stop_control(self):
         """停止控制机器人"""
-        with self._control_lock:
-            if self._control_active:
-                self._control_active = False
-                self._arm_first_state = None
-                self._prev_tech_state = None
-                print("[Control] Test robot control stopped.")
+        pass

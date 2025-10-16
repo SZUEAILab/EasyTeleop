@@ -4,6 +4,8 @@ import numpy as np
 from matplotlib.animation import FuncAnimation
 from queue import Queue
 import matplotlib
+import threading
+import time
 matplotlib.use('TkAgg')  # 使用TkAgg后端
 
 class HandVisualizer:
@@ -41,7 +43,7 @@ class HandVisualizer:
         (XR_HAND_JOINT_PALM_EXT, XR_HAND_JOINT_WRIST_EXT),
         
         # 拇指
-        (XR_HAND_JOINT_PALM_EXT, XR_HAND_JOINT_THUMB_METACARPAL_EXT),
+        (XR_HAND_JOINT_WRIST_EXT, XR_HAND_JOINT_THUMB_METACARPAL_EXT),
         (XR_HAND_JOINT_THUMB_METACARPAL_EXT, XR_HAND_JOINT_THUMB_PROXIMAL_EXT),
         (XR_HAND_JOINT_THUMB_PROXIMAL_EXT, XR_HAND_JOINT_THUMB_DISTAL_EXT),
         (XR_HAND_JOINT_THUMB_DISTAL_EXT, XR_HAND_JOINT_THUMB_TIP_EXT),
@@ -76,29 +78,48 @@ class HandVisualizer:
     ]
     
     def __init__(self):
+        self.data_queue = Queue()
+        self.left_joints_data = None
+        self.right_joints_data = None
+        self.left_root_pose = None
+        self.right_root_pose = None
+        self.running = False
+        
+        # 初始化图形相关变量
+        self.fig = None
+        self.ax = None
+        self.left_joints_scatter = None
+        self.right_joints_scatter = None
+        self.left_bone_lines = []
+        self.right_bone_lines = []
+
+    def initialize_plot(self):
+        """初始化绘图组件"""
         self.fig = plt.figure(figsize=(10, 8))
         self.ax = self.fig.add_subplot(111, projection='3d')
-        self.data_queue = Queue()
-        self.joints_data = None
-        self.running = True
         
         # 设置图表属性
         self.ax.set_xlabel('X')
         self.ax.set_ylabel('Y')
         self.ax.set_zlabel('Z')
-        self.ax.set_xlim([-0.5, 0.5])
-        self.ax.set_ylim([-0.5, 0.5])
-        self.ax.set_zlim([-0.5, 0.5])
-        self.ax.set_title('Left Hand Joints Visualization')
+        self.ax.set_xlim([-0.12, 0.12])
+        self.ax.set_ylim([-0.12, 0.12])
+        self.ax.set_zlim([-0.12, 0.12])
+        self.ax.set_title('Hand Joints Visualization (Relative to rootPose)')
         
         # 创建散点图用于显示关节
-        self.joints_scatter = self.ax.scatter([], [], [], c='red', marker='o', s=30)
-        
+        self.left_joints_scatter = self.ax.scatter([], [], [], c='red', marker='o', s=30, label='Left Hand')
+        self.right_joints_scatter = self.ax.scatter([], [], [], c='blue', marker='o', s=30, label='Right Hand')
+        self.ax.legend()
+
         # 创建连线用于显示手指骨骼
-        self.bone_lines = []
+        self.left_bone_lines = []
+        self.right_bone_lines = []
         for _ in self.HAND_CONNECTIONS:
-            line, = self.ax.plot([], [], [], 'b-', linewidth=1.5)
-            self.bone_lines.append(line)
+            left_line, = self.ax.plot([], [], [], 'r-', linewidth=1.5, alpha=0.7)
+            right_line, = self.ax.plot([], [], [], 'b-', linewidth=1.5, alpha=0.7)
+            self.left_bone_lines.append(left_line)
+            self.right_bone_lines.append(right_line)
 
     def quaternion_to_rotation_matrix(self, q):
         """四元数转旋转矩阵，q为dict或list[x, y, z, w]"""
@@ -117,6 +138,29 @@ class HandVisualizer:
         ])
         return R
 
+    def transform_to_root_pose(self, positions, root_pose):
+        """将关节位置转换为相对于rootPose的坐标"""
+        if root_pose is None:
+            return positions
+            
+        # 获取根姿势的位置和旋转
+        root_pos = np.array([root_pose['position']['x'], 
+                            root_pose['position']['y'], 
+                            root_pose['position']['z']])
+        
+        root_rot = self.quaternion_to_rotation_matrix(root_pose['rotation'])
+        
+        # 变换所有关节位置
+        transformed_positions = []
+        for pos in positions:
+            # 相对于根姿势的位置
+            relative_pos = pos - root_pos
+            # 应用根姿势的旋转逆变换
+            transformed_pos = np.dot(np.linalg.inv(root_rot), relative_pos)
+            transformed_positions.append(transformed_pos)
+            
+        return np.array(transformed_positions)
+
     def extract_positions(self, joints):
         """从关节数据中提取位置信息"""
         positions = []
@@ -125,44 +169,74 @@ class HandVisualizer:
             positions.append([pos['x'], pos['y'], pos['z']])
         return np.array(positions)
 
-    def update_bones(self, positions):
+    def update_bones(self, positions, bone_lines, color='r'):
         """更新手指骨骼连线"""
         if positions is None or len(positions) < 26:
             return
             
         for i, (start_idx, end_idx) in enumerate(self.HAND_CONNECTIONS):
-            if i < len(self.bone_lines):
+            if i < len(bone_lines):
                 start_pos = positions[start_idx]
                 end_pos = positions[end_idx]
-                self.bone_lines[i].set_data([start_pos[0], end_pos[0]], 
-                                          [start_pos[1], end_pos[1]])
-                self.bone_lines[i].set_3d_properties([start_pos[2], end_pos[2]])
+                bone_lines[i].set_data([start_pos[0], end_pos[0]], 
+                                      [start_pos[1], end_pos[1]])
+                bone_lines[i].set_3d_properties([start_pos[2], end_pos[2]])
 
     def update(self, frame):
         """动画更新函数"""
         # 处理队列中的数据
         while not self.data_queue.empty():
             data = self.data_queue.get()
+            
+            # 处理左手数据
             if 'leftHand' in data and data['leftHand']['isTracked'] and 'joints' in data['leftHand']:
-                self.joints_data = data['leftHand']['joints']
+                self.left_joints_data = data['leftHand']['joints']
+                self.left_root_pose = data['leftHand'].get('rootPose', None)
+            else:
+                self.left_joints_data = None
+                
+            # 处理右手数据
+            if 'rightHand' in data and data['rightHand']['isTracked'] and 'joints' in data['rightHand']:
+                self.right_joints_data = data['rightHand']['joints']
+                self.right_root_pose = data['rightHand'].get('rootPose', None)
+            else:
+                self.right_joints_data = None
         
-        if self.joints_data:
-            print(len(self.joints_data))
-
+        # 更新左手
         
-        if self.joints_data and len(self.joints_data) >= 26:
-            positions = self.extract_positions(self.joints_data)
+        if self.left_joints_data and len(self.left_joints_data) >= 26:
+            positions = self.extract_positions(self.left_joints_data)
+            
+            # 转换为相对于rootPose的坐标
+            # positions = self.transform_to_root_pose(positions, self.root_pose)
+            positions = positions - np.array([self.left_root_pose['position']['x'],self.left_root_pose['position']['y'],self.left_root_pose['position']['z']]) 
             
             # 更新关节散点
             xs = positions[:, 0]
             ys = positions[:, 1]
             zs = positions[:, 2]
-            self.joints_scatter._offsets3d = (xs, ys, zs)
+            self.left_joints_scatter._offsets3d = (xs, ys, zs)
             
             # 更新骨骼连线
-            self.update_bones(positions)
+            self.update_bones(positions, self.left_bone_lines, 'r')
             
-        return [self.joints_scatter] + self.bone_lines
+        # 更新右手
+        if self.right_joints_data and len(self.right_joints_data) >= 26:
+            positions = self.extract_positions(self.right_joints_data)
+            
+            # 转换为相对于rootPose的坐标
+            positions = positions - np.array([self.right_root_pose['position']['x'],self.right_root_pose['position']['y'],self.right_root_pose['position']['z']]) 
+            
+            # 更新关节散点
+            xs = positions[:, 0]
+            ys = positions[:, 1]
+            zs = positions[:, 2]
+            self.right_joints_scatter._offsets3d = (xs, ys, zs)
+            
+            # 更新骨骼连线
+            self.update_bones(positions, self.right_bone_lines, 'b')
+            
+        return [self.left_joints_scatter, self.right_joints_scatter] + self.left_bone_lines + self.right_bone_lines
 
     def add_data(self, data):
         """添加新的手部数据"""
@@ -170,11 +244,14 @@ class HandVisualizer:
 
     def start(self):
         """开始动画显示"""
-        ani = FuncAnimation(self.fig, self.update, interval=50, 
-                          save_count=50, blit=False)
+        self.initialize_plot()
+        self.running = True
+        self.ani = FuncAnimation(self.fig, self.update, interval=50, 
+                                save_count=50, blit=False)
         plt.show()
 
     def stop(self):
         """停止显示"""
         self.running = False
-        plt.close('all')
+        if self.fig:
+            plt.close(self.fig)

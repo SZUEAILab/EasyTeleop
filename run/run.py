@@ -14,7 +14,7 @@ if __name__ == '__main__':
         dc = DataCollect()
         l_arm = RealMan({"ip": "192.168.0.18", "port": 8080})
         r_arm = RealMan({"ip": "192.168.0.19", "port": 8080})
-        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         camera1 = RealSenseCamera({"serial":"153122070447","target_fps": 30}) 
         
@@ -26,10 +26,15 @@ if __name__ == '__main__':
         l_arm.on("state", dc.put_robot_state)
         
         # 注册回调函数
-        teleop.on("leftGripDown",l_arm.start_control)
-        teleop.on("leftGripUp",l_arm.stop_control)
-        teleop.on("rightGripDown",r_arm.start_control)
-        teleop.on("rightGripUp",r_arm.stop_control)
+        teleop.on("leftGripTurnDown",l_arm.start_control)
+        teleop.on("leftGripTurnUp",l_arm.stop_control)
+        teleop.on("leftPosRot",l_arm.add_pose_data)
+        teleop.on("leftTrigger",l_arm.add_gripper_data)
+
+        teleop.on("rightGripTurnDown",r_arm.start_control)
+        teleop.on("rightGripTurnUp",r_arm.stop_control)
+        teleop.on("rightPosRot",r_arm.add_pose_data)
+        teleop.on("rightTrigger",r_arm.add_gripper_data)
         
         teleop.on("buttonATurnDown",dc.toggle_capture_state)
         
