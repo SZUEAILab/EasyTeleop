@@ -11,9 +11,12 @@ class BaseRobot(BaseDevice):
     """
     def __init__(self, config: Dict[str, Any] = None):
         super().__init__(config)
-        # 创建两个队列，分别用于位姿和夹爪控制
+        # 创建目标姿态队列
         self.pose_queue = Queue()
-        self.gripper_queue = Queue()
+
+        # 控制线程
+        self.control_thread = None
+        self.control_thread_running = False
 
     @abstractmethod
     def add_pose_data(self, pose_data) -> None:
@@ -22,7 +25,8 @@ class BaseRobot(BaseDevice):
         :param pose_data: 位姿数据
         :return: None
         """
-        pass
+        if self.is_controlling:
+            self.pose_queue.put(pose_data)
     @abstractmethod
     def add_gripper_data(self, gripper_data) -> None:
         """

@@ -9,7 +9,6 @@ import json
 import asyncio
 import websockets
 from websockets.server import WebSocketServerProtocol
-import uuid
 import time
 import logging
 
@@ -1482,7 +1481,7 @@ async def root():
 @app.on_event("startup")
 async def startup_event():
     init_tables(DB_PATH)
-    from Components import MQTTStatusSync
+    from server import MQTTStatusSync
     sync_service = MQTTStatusSync(
         db_path="EasyTeleop.db",
         mqtt_broker="121.43.162.224",  # 修改为实际的MQTT服务器地址

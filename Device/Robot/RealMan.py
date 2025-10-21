@@ -60,9 +60,7 @@ class RealMan(BaseRobot):
         self.gripper_close = False
         self.delta = [0, 0, 0 , 0 , 0 , 0]
         
-        # 控制线程
-        self.control_thread = None
-        self.control_thread_running = False
+        
         
     
 
@@ -228,12 +226,6 @@ class RealMan(BaseRobot):
                 self.set_gripper(gripper_data)
             
             time.sleep(0.01)  # 控制循环频率
-
-    def add_pose_data(self, pose_data):
-        """向位姿队列添加数据"""
-        if self.is_controlling:
-            self.pose_queue.put(pose_data)
-
     def add_gripper_data(self, gripper_data):
         """向夹爪队列添加数据"""
         if self.is_controlling:

@@ -63,7 +63,14 @@ def calculate_hand_values(hand_data):
     def get_joint_position(joint):
         """获取关节位置"""
         return np.array([joint['position']['x'], joint['position']['y'], joint['position']['z']])
-    
+    def calculate_bone_bend(joint1, joint2, joint3):
+        vec1 = get_joint_position(joint2) - get_joint_position(joint1)
+        vec2 = get_joint_position(joint3) - get_joint_position(joint2)
+        cos_angle = np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+        # 限制在[-1, 1]范围内，防止数值误差
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)
+        angle = np.arccos(cos_angle)
+        return angle/ (2 * np.pi) *360
     def calculate_finger_bend(joint1, joint2, joint3, joint4):
         """
         计算手指弯曲程度
@@ -125,7 +132,7 @@ def calculate_hand_values(hand_data):
             )
             cos_angle = np.clip(cos_angle, -1.0, 1.0)
             angle = np.arccos(np.abs(cos_angle))  # 使用绝对值计算夹角
-            print(f"angel: {angle}")
+            # print(f"angel: {angle}")
             
             # 将夹角映射到0-100范围
             # 0度时为100（完全收拢），90度时为0（完全张开）
@@ -170,11 +177,16 @@ def calculate_hand_values(hand_data):
         )
         
         # 拇指弯曲程度 (thumb)
-        thumb_bend = calculate_finger_bend(
+        # thumb_bend = calculate_finger_bend(
+        #     joints[XR_HAND_JOINT_THUMB_METACARPAL_EXT],
+        #     joints[XR_HAND_JOINT_THUMB_PROXIMAL_EXT],
+        #     joints[XR_HAND_JOINT_THUMB_DISTAL_EXT],
+        #     joints[XR_HAND_JOINT_THUMB_TIP_EXT]
+        # )
+        thumb_bend = calculate_bone_bend(
             joints[XR_HAND_JOINT_THUMB_METACARPAL_EXT],
             joints[XR_HAND_JOINT_THUMB_PROXIMAL_EXT],
-            joints[XR_HAND_JOINT_THUMB_DISTAL_EXT],
-            joints[XR_HAND_JOINT_THUMB_TIP_EXT]
+            joints[XR_HAND_JOINT_THUMB_DISTAL_EXT]
         )
         
         # 拇指收拢程度
@@ -211,10 +223,12 @@ if __name__ == '__main__':
         def teleop_handle_socket_data(message):
             if message['type'] == "hand":
                 visualizer.add_data(message['payload'])
+                left_hand_values = [0, 0, 0, 0, 0, 0]
+                right_hand_values = [0, 0, 0, 0, 0, 0]
                 # 计算并打印左手灵巧手控制值
-                # if 'leftHand' in message['payload'] and message['payload']['leftHand']['isTracked']:
-                #     left_hand_values = calculate_hand_values(message['payload']['leftHand'])
-                #     print(f"左手灵巧手控制值: {left_hand_values}")
+                if 'leftHand' in message['payload'] and message['payload']['leftHand']['isTracked']:
+                    left_hand_values = calculate_hand_values(message['payload']['leftHand'])
+                    # print(f"左手灵巧手控制值: {left_hand_values}")
                 #     if left_hand_values != [0, 0, 0, 0, 0, 0]:
                 #         # 添加上下界限制，确保值在有效范围内
                 #         aux_value = max(0, min(100, int((-9+left_hand_values[0])*4)))
@@ -238,7 +252,7 @@ if __name__ == '__main__':
                     print(f"右手灵巧手控制值: {right_hand_values}")
                     if right_hand_values != [0, 0, 0, 0, 0, 0]:
                         # 添加上下界限制，确保值在有效范围内
-                        aux_value = max(0, min(100, int((-10+right_hand_values[0])*5)))
+                        aux_value = max(0, min(100, int((-10+right_hand_values[0])*2)))
                         index_value = max(0, min(100, int((-5+right_hand_values[1])*2.5)))
                         middle_value = max(0, min(100, int((-5+right_hand_values[2])*2.5)))
                         ring_value = max(0, min(100, int((-5+right_hand_values[3])*2.5)))
@@ -251,8 +265,12 @@ if __name__ == '__main__':
                         r_hand.fingers["ring"] = ring_value
                         r_hand.fingers["little"] = little_value
                         r_hand.fingers["flex"] = flex_value
+                if right_hand_values[0] > 20 and right_hand_values[1] > 40 and right_hand_values[2] > 40 and right_hand_values[3] >40 and right_hand_values[4] >40:
+                    r_arm.start_control()
+                if left_hand_values[0] > 20 and left_hand_values[1] > 40 and left_hand_values[2] > 40 and left_hand_values[3] >40 and left_hand_values[4] >40:
+                    r_arm.stop_control()
 
-            # teleop.handle_socket_data(message)
+            teleop.handle_socket_data(message)
         
         
         r_arm.start()
@@ -260,7 +278,7 @@ if __name__ == '__main__':
         vrsocket.start() 
 
         time.sleep(1)
-        r_arm.start_control()
+        # r_arm.start_control()
 
         visualizer.start()
         

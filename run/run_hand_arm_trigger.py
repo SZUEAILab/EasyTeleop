@@ -25,17 +25,18 @@ if __name__ == '__main__':
         devices = [l_arm, l_hand, vrsocket]
         
         # 注册回调函数
-        @teleop.on("leftPosRot")
-        def control_l_arm(move):
-            l_arm.add_pose_data(move)
-        teleop.on("leftGripTurnDown",l_arm.start_control)
-        teleop.on("leftGripTurnUp",l_arm.stop_control)
-        @teleop.on("leftTrigger")
+        teleop.on("rightPosRot",l_arm.add_pose_data)
+        @teleop.on("rightGripTurnDown")
+        def control_l_arm():
+            print("开始控制机械臂")
+            l_arm.start_control()
+        teleop.on("rightGripTurnUp",l_arm.stop_control)
+        @teleop.on("rightTrigger")
         def control_l_arm_hand(trigger):
             l_arm.add_gripper_data(trigger)
-            print(f"触发器原始值: {trigger}")
+            # print(f"触发器原始值: {trigger}")
             trigger = int((1-trigger)*100) #限制在0-1之间
-            print(f"触发器: {trigger}")
+            # print(f"触发器: {trigger}")
             
             # l_hand.set_fingers(fingers)
             l_hand.fingers["aux"] = int(trigger)
@@ -45,7 +46,7 @@ if __name__ == '__main__':
             l_hand.fingers["little"] = int(trigger*0.8)
         
 
-        @teleop.on("leftStick")
+        @teleop.on("rightStick")
         def stick_callback(state):
             l_hand.fingers["flex"] = 70+int(state['x']*50)
             # print(f"左摇杆: {state}")
