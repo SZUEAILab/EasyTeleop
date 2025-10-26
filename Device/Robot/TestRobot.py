@@ -35,7 +35,7 @@ class TestRobot(BaseRobot):
     def add_pose_data(self, pose_data):
         pass
     
-    def add_gripper_data(self, gripper_data):
+    def add_end_effector_data(self, end_effector_data):
         pass
 
     def set_config(self, config):
@@ -99,10 +99,13 @@ class TestRobot(BaseRobot):
             if elapsed < self.min_interval:
                 time.sleep(self.min_interval - elapsed)
 
-    def start_control(self, state, trigger=None):
+    def start_control(self):
         """开始控制机器人"""
         pass
 
     def stop_control(self):
         """停止控制机器人"""
+        pass
+
+    def _control_loop(self):
         pass

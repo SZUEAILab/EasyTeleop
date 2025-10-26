@@ -61,7 +61,7 @@ class SingleArmTeleopGroup(BaseTeleopGroup):
             if self.devices[0]:
                 self.teleop.on("leftGripTurnDown",self.devices[0].start_control)
                 self.teleop.on("leftGripTurnUp",self.devices[0].stop_control)
-                self.teleop.on("leftTrigger",self.devices[0].add_gripper_data)
+                self.teleop.on("leftTrigger",self.devices[0].add_end_effector_data)
                 self.teleop.on("leftPosRot",self.devices[0].add_pose_data)
                 self.devices[0].on("state", self.data_collect.put_robot_state)
 

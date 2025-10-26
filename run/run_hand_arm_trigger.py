@@ -18,7 +18,7 @@ if __name__ == '__main__':
     try:
         l_arm = RealMan({"ip": "192.168.0.17", "port": 8080})
         l_hand = Revo2OnRealMan({"ip": "192.168.0.17", "port": 8080,"baudrate":460800, "address": 127}) 
-        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
+        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
         teleop = TeleopMiddleware()
         
         
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         teleop.on("rightGripTurnUp",l_arm.stop_control)
         @teleop.on("rightTrigger")
         def control_l_arm_hand(trigger):
-            l_arm.add_gripper_data(trigger)
+            l_arm.add_end_effector_data([trigger])
             # print(f"触发器原始值: {trigger}")
             trigger = int((1-trigger)*100) #限制在0-1之间
             # print(f"触发器: {trigger}")

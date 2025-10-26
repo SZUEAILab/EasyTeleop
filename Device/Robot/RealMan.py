@@ -4,7 +4,7 @@ import numpy as np
 import threading
 from threading import Lock
 from typing import Dict, Any
-from queue import Queue
+from collections import deque
 from .BaseRobot import BaseRobot
 
 class RealMan(BaseRobot):
@@ -36,7 +36,7 @@ class RealMan(BaseRobot):
         
         # 继承并扩展父类的事件
         self._events.update({
-            "state": self._default_callback,
+            "end_effector": self._default_callback,
         })
         
         self.target_fps = 30  # 目标帧率
@@ -196,8 +196,8 @@ class RealMan(BaseRobot):
             # 清空队列
             while not self.pose_queue.empty():
                 self.pose_queue.get()  # 取出并删除元素
-            while not self.gripper_queue.empty():
-                self.gripper_queue.get()
+            while not self.end_effector_queue.empty():
+                self.end_effector_queue.get()
             
             self.arm_first_state = None
             self.prev_tech_state = None
@@ -205,9 +205,13 @@ class RealMan(BaseRobot):
     def _control_loop(self):
         """控制线程主循环"""
         while self.control_thread_running:
-            # 处理位姿队列
-            while not self.pose_queue.empty():
-                pose_data = self.pose_queue.get()
+            # 处理位姿队列，只取最新的一帧数据
+            pose_data = None
+            if self.pose_queue:
+                pose_data = self.pose_queue[-1]  # 获取最新数据但不移除
+            
+            # 只处理最新的位姿数据
+            if pose_data is not None:
                 if self.prev_tech_state is None:
                     # 初始化状态
                     self.prev_tech_state = pose_data
@@ -220,16 +224,16 @@ class RealMan(BaseRobot):
                     elif len(pose_data) == 7:
                         self.moveq(pose_data)
             
-            # 处理夹爪队列
-            while not self.gripper_queue.empty():
-                gripper_data = self.gripper_queue.get()
+            # 处理夹爪队列，只取最新的一帧数据
+            gripper_data = None
+            if self.end_effector_queue:
+                gripper_data = self.end_effector_queue[-1]  # 获取最新数据但不移除
+            
+            # 只处理最新的夹爪数据
+            if gripper_data is not None:
                 self.set_gripper(gripper_data)
             
             time.sleep(0.01)  # 控制循环频率
-    def add_gripper_data(self, gripper_data):
-        """向夹爪队列添加数据"""
-        if self.is_controlling:
-            self.gripper_queue.put(gripper_data)
 
     def move(self, tech_state):
         """欧拉角控制"""
