@@ -1,6 +1,7 @@
 from .BaseHand import BaseHand
 from Robotic_Arm.rm_robot_interface import rm_thread_mode_e,rm_peripheral_read_write_params_t, RoboticArm
 import time
+import threading
 
 class Revo2OnRealMan(BaseHand):
     """RealMan通过Modbus驱动Revo2机械手"""
@@ -39,14 +40,6 @@ class Revo2OnRealMan(BaseHand):
 
         self.arm_controller = RoboticArm(rm_thread_mode_e.RM_TRIPLE_MODE_E)
         self.handle = None
-        self.fingers = {
-            "aux": 0,
-            "flex": 0,
-            "index": 0,
-            "middle": 0,
-            "ring": 0,
-            "little": 0,
-        }
         
 
     def set_config(self, config):
@@ -76,8 +69,8 @@ class Revo2OnRealMan(BaseHand):
         ret = self.arm_controller.rm_write_registers(param, [fingers["flex"], fingers["aux"], fingers["middle"],fingers["index"],fingers["little"],fingers["ring"]])
         return ret
     def _main(self):
-        self.set_fingers(self.fingers)
-        # time.sleep(0.1)
+        
+        time.sleep(0.1)
 
     def _connect_device(self) -> bool:
         """连接设备"""
@@ -126,3 +119,42 @@ class Revo2OnRealMan(BaseHand):
         except Exception as e:
             print(f"Error disconnecting robot arm: {str(e)}")
             return False
+        
+    def start_control(self):
+        if not self.is_controlling:
+            self.is_controlling = True
+            self.control_thread_running = True
+            
+            # 启动控制线程
+            self.control_thread = threading.Thread(target=self._control_loop, daemon=True)
+            self.control_thread.start()
+            
+            print("[Control] Control started.")
+    
+    def stop_control(self):
+         if self.is_controlling:
+            self.is_controlling = False
+            self.control_thread_running = False
+            
+            # 等待控制线程结束
+            if self.control_thread and self.control_thread.is_alive():
+                self.control_thread.join(timeout=1.0)
+
+            # 清空队列
+            self.hand_queue.clear()
+            
+            print("[Control] Control stopped.")
+
+    def _control_loop(self):
+        while self.control_thread_running:
+            latest_data = None
+            # 获取最新的数据，但不移除队列中的元素
+            if len(self.hand_queue) > 0:
+                latest_data = self.hand_queue[-1]  # 获取最新的数据（deque的最后一个元素）
+            
+            # 如果有新数据，则执行控制
+            if latest_data is not None:
+                self.fingers = self.set_fingers(latest_data)
+            
+            # 添加一个小延时以控制循环频率
+            time.sleep(0.01)
