@@ -9,7 +9,7 @@ import time
 
 if __name__ == '__main__':
     try:
-        arm = RealMan({"ip": "192.168.0.17", "port": 8080})
+        arm = RealMan({"ip": "192.168.0.19", "port": 8080})
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         

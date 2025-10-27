@@ -174,10 +174,8 @@ class RealMan(BaseRobot):
                 self.control_thread.join(timeout=1.0)
 
             # 清空队列
-            while not self.pose_queue.empty():
-                self.pose_queue.get()  # 取出并删除元素
-            while not self.end_effector_queue.empty():
-                self.end_effector_queue.get()
+            self.pose_queue.clear()
+            self.end_effector_queue.clear()
             
             self.arm_first_state = None
             self.prev_tech_state = None
@@ -213,7 +211,7 @@ class RealMan(BaseRobot):
             if gripper_data is not None:
                 self.set_gripper(gripper_data)
             
-            time.sleep(0.01)  # 控制循环频率
+            time.sleep(0.001)  # 控制循环频率
 
     def move(self, tech_state):
         """欧拉角控制"""
