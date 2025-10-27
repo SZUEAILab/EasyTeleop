@@ -24,7 +24,7 @@ def main():
         interpolator = Interpolation(max_data_points=50, interpolation_rate=0.005)
         
         arm = RealMan({"ip": "192.168.0.17", "port": 8080})
-        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         
         devices = [arm, vrsocket]
@@ -48,7 +48,7 @@ def main():
                 if arm.prev_tech_state is None:
                     # 初始化状态
                     arm.prev_tech_state = pose_data
-                    arm.arm_first_state = arm.get_state()
+                    arm.arm_first_state = arm.get_pose()
                     arm.delta = [0, 0, 0, 0, 0, 0, 0]
                 else:
                     arm.move(pose_data)
