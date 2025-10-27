@@ -10,15 +10,11 @@ import time
 if __name__ == '__main__':
     try:
         arm = RealMan({"ip": "192.168.0.17", "port": 8080})
-        vrsocket = VRSocket({"ip": '192.168.0.100', "port": 12345})
-        from Device.Camera.RealSenseCamera import RealSenseCamera
-        camera = RealSenseCamera({"serial": "838212060473"})
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         
         devices = [arm, vrsocket]
         
-        # 注册回调函数
-        camera.on("frame",teleop.handle_camera_data)
 
         teleop.on("rightGripTurnDown",arm.start_control)
         teleop.on("rightGripTurnUp",arm.stop_control)

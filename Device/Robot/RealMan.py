@@ -34,24 +34,10 @@ class RealMan(BaseRobot):
         
         super().__init__(config)
         
-        # 继承并扩展父类的事件
-        self._events.update({
-            "end_effector": self._default_callback,
-        })
-        
         self.target_fps = 30  # 目标帧率
         self.min_interval = 1.0 / self.target_fps  # 最小间隔时间
         
         self.arm_controller = RoboticArm(rm_thread_mode_e.RM_TRIPLE_MODE_E)
-        self.handle = None
-        
-        
-        # 状态存储变量
-        self.current_state = None
-        self.current_gripper_state = None
-        
-        # 线程相关变量
-        self.state_lock = Lock()  # 用于线程安全访问状态变量
         
         # 控制相关变量
         self.is_controlling = False
@@ -70,18 +56,16 @@ class RealMan(BaseRobot):
             succ, arm_state = self.arm_controller.rm_get_current_arm_state()
             if not succ:
                 
-                with self.state_lock:
-                    self.current_state = arm_state["pose"]
-                    self.emit("state",self.current_state)#调用回调函数
+                self.current_pose_data = arm_state["pose"]
+                self.emit("pose",self.current_pose_data)#调用回调函数
             else:
                 raise RuntimeError("Failed to get arm state")
         
             # 获取夹爪状态
             succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
             if not succ_gripper:
-                with self.state_lock:
-                    self.current_gripper_state = gripper_state
-                    self.emit("gripper",self.current_gripper_state)#调用回调函数
+                self.current_end_effector_data = gripper_state
+                self.emit("end_effector",self.current_end_effector_data)#调用回调函数
             else:
                 raise RuntimeError("Failed to get gripper state")
             # 帧率控制，而不是固定间隔
@@ -104,16 +88,14 @@ class RealMan(BaseRobot):
             # 获取手臂状态
             succ, arm_state = self.arm_controller.rm_get_current_arm_state()
             if not succ:
-                with self.state_lock:
-                    self.current_state = arm_state["pose"]
+                self.current_pose_data = arm_state["pose"]
             else:
                 raise RuntimeError("Failed to get arm state")
             
             # 获取夹爪状态
             succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
             if not succ_gripper:
-                with self.state_lock:
-                    self.current_gripper_state = gripper_state
+                self.current_end_effector_data = gripper_state
             else:
                 raise RuntimeError("Failed to get gripper state")
                     
@@ -161,15 +143,13 @@ class RealMan(BaseRobot):
         self.port = int(config["port"])
         
         return True
-    def get_state(self):
+    def get_pose_data(self):
         """获取当前状态（线程安全）"""
-        with self.state_lock:
-            return self.current_state.copy() if self.current_state is not None else None
+        return self.current_pose_data.copy() if self.current_pose_data is not None else None
 
-    def get_gripper(self):
+    def get_end_effector_data(self):
         """获取当前夹爪状态（线程安全）"""
-        with self.state_lock:
-            return self.current_gripper_state
+        return self.current_end_effector_data
     
     def start_control(self, state=None, trigger=None):
         """开始控制手臂，启动控制线程"""
@@ -215,7 +195,7 @@ class RealMan(BaseRobot):
                 if self.prev_tech_state is None:
                     # 初始化状态
                     self.prev_tech_state = pose_data
-                    self.arm_first_state = self.get_state()
+                    self.arm_first_state = self.get_pose_data()
                     self.delta = [0, 0, 0, 0, 0, 0, 0]
                 else:
                     # 执行位姿控制

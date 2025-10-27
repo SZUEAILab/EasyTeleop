@@ -14,12 +14,16 @@ class BaseRobot(BaseDevice):
         super().__init__(config)
 
         self._events.update({
-            "state": self._default_callback,
+            "pose": self._default_callback,
+            "end_effector": self._default_callback
         })
 
         # 创建目标姿态队列，使用deque确保只保留最新数据
         self.pose_queue = deque(maxlen=10)
         self.end_effector_queue = deque(maxlen=10)
+
+        self.current_pose_data = None
+        self.current_end_effector_data = None
 
         # 控制线程
         self.is_controlling = False
@@ -45,6 +49,20 @@ class BaseRobot(BaseDevice):
         if self.is_controlling:
             self.end_effector_queue.append(end_effector_data)
 
+    def get_pose_data(self) -> list:
+        """
+        获取当前机器人位姿
+        :return: 机器人位姿数据
+        """
+        return self.current_pose_data
+
+    def get_end_effector_data(self) -> list:
+        """
+        获取当前机器人末端执行器数据
+        :return: 末端执行器数据
+        """
+        return self.current_end_effector_data
+
     @abstractmethod
     def start_control(self) -> None:
         """
@@ -60,3 +78,4 @@ class BaseRobot(BaseDevice):
         :return: None
         """
         pass
+
