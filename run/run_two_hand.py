@@ -286,12 +286,12 @@ if __name__ == '__main__':
                     left_hand_values = calculate_hand_values(message['payload']['leftHand'])
                     if left_hand_values != [0, 0, 0, 0, 0, 0]:
                         # 添加上下界限制，确保值在有效范围内
-                        aux_value = max(0, min(100, int((right_hand_values[0]))))
-                        index_value = max(0, min(100, int((right_hand_values[1]))))
-                        middle_value = max(0, min(100, int((right_hand_values[2]))))
-                        ring_value = max(0, min(100, int((right_hand_values[3]))))
-                        little_value = max(0, min(100, int((right_hand_values[4]))))
-                        flex_value = max(0, min(100, int((right_hand_values[5]))))
+                        aux_value = max(0, min(100, int((left_hand_values[0]))))
+                        index_value = max(0, min(100, int((left_hand_values[1]))))
+                        middle_value = max(0, min(100, int((left_hand_values[2]))))
+                        ring_value = max(0, min(100, int((left_hand_values[3]))))
+                        little_value = max(0, min(100, int((left_hand_values[4]))))
+                        flex_value = max(0, min(100, int((left_hand_values[5]))))
 
                         fingers = {}
                         fingers["aux"] = aux_value
@@ -334,10 +334,12 @@ if __name__ == '__main__':
                         fingers["flex"] = flex_value
 
                         r_hand.add_hand_data(fingers)
-                # if right_hand_values[0] > 20 and right_hand_values[1] > 40 and right_hand_values[2] > 40 and right_hand_values[3] >40 and right_hand_values[4] >40:
-                #     r_arm.start_control()
-                # if left_hand_values[0] > 20 and left_hand_values[1] > 40 and left_hand_values[2] > 40 and left_hand_values[3] >40 and left_hand_values[4] >40:
-                #     r_arm.stop_control()
+                if right_hand_values[0] > 20 and right_hand_values[1] > 40 and right_hand_values[2] > 40 and right_hand_values[3] >40 and right_hand_values[4] >40:
+                    l_arm.start_control()
+                    r_arm.start_control()
+                if left_hand_values[0] > 20 and left_hand_values[1] > 40 and left_hand_values[2] > 40 and left_hand_values[3] >40 and left_hand_values[4] >40:
+                    l_arm.start_control()
+                    r_arm.start_control()
 
             teleop.handle_socket_data(message)
         
