@@ -7,23 +7,44 @@ authors = [                         # 作者信息（支持多人）
 description = "Easy teleoperation tool for robotic arm"
 readme = "README.md"
 requires-python = ">=3.10"
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "aiortc>=1.13.0",
     "av>=14.4.0",
     "fastapi>=0.116.1",
-    "mediapipe>=0.10.14",
     "numpy>=2.2.6",
     "open3d>=0.19.0",
     "opencv-python>=4.11.0.86",
     "paho-mqtt>=2.1.0",
     "pydantic>=2.11.7",
-    "pyorbbecsdk>=1.3.2",
     "pyrealsense2>=2.56.5.9235",
     "pyyaml>=6.0.2",
     "robotic-arm>=1.1.1",
     "scipy>=1.15.3",
     "uuid>=1.30",
     "uvicorn>=0.35.0",
-    "vuer[all]>=0.0.68",
     "websockets>=15.0.1",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["Components*", "Device*", "TeleopGroup*"]
+namespaces = false
