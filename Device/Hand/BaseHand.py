@@ -12,18 +12,27 @@ class BaseHand(BaseDevice):
 
         # 使用deque作为hand_queue，设置maxlen为10，当超过长度时自动移除最旧的元素
         self.hand_queue = deque(maxlen=10)
+
+        self.current_hand_data = None
         # 控制线程
         self.is_controlling = False
         self.control_thread = None
         self.control_thread_running = False
 
-    def add_hand_data(self,hand_data):
+    def add_hand_data(self,hand_data: list):
         self.hand_queue.append(hand_data)
 
     @abstractmethod
+    def handle_openxr(self, hand_data: dict) -> list:
+        """
+        处理OpenXR数据成自身控制需要的值
+        :param openxr_data: OpenXR数据
+        :return: List,自身控制所需的数据
+        """
+    @abstractmethod
     def start_control(self) -> None:
         """
-        开始控制机器人
+        开始控制手
         :return: None
         """
         pass

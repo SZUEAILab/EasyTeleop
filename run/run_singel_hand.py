@@ -208,16 +208,16 @@ def calculate_hand_values(hand_data):
 
 if __name__ == '__main__':
     try:
-        r_arm = RealMan({"ip": "192.168.0.17", "port": 8080})
-        r_hand = Revo2OnRealMan({"ip": "192.168.0.17", "port": 8080,"baudrate":460800, "address": 127}) 
-        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
+        arm = RealMan({"ip": "192.168.0.19", "port": 8080})
+        hand = Revo2OnRealMan({"ip": "192.168.0.19", "port": 8080,"baudrate":460800, "address": 127}) 
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         visualizer = HandVisualizer()
         
         
-        devices = [r_arm, r_hand, vrsocket]
+        devices = [arm, hand, vrsocket]
         
-        teleop.on("rightPosRot",r_arm.add_pose_data)
+        teleop.on("rightPosRot",arm.add_pose_data)
         #注册回调函数
         @vrsocket.on("message")
         def teleop_handle_socket_data(message):
@@ -227,62 +227,27 @@ if __name__ == '__main__':
                 right_hand_values = [0, 0, 0, 0, 0, 0]
                 # 计算并打印左手灵巧手控制值
                 if 'leftHand' in message['payload'] and message['payload']['leftHand']['isTracked']:
-                    left_hand_values = calculate_hand_values(message['payload']['leftHand'])
-                    # print(f"左手灵巧手控制值: {left_hand_values}")
-                #     if left_hand_values != [0, 0, 0, 0, 0, 0]:
-                #         # 添加上下界限制，确保值在有效范围内
-                #         aux_value = max(0, min(100, int((-9+left_hand_values[0])*4)))
-                #         index_value = max(0, min(100, int(left_hand_values[1]*2)))
-                #         middle_value = max(0, min(100, int(left_hand_values[2]*2)))
-                #         ring_value = max(0, min(100, int(left_hand_values[3]*2)))
-                #         little_value = max(0, min(100, int(left_hand_values[4]*2)))
-                #         flex_value = max(0, min(100, int(left_hand_values[5])))
-                        
-                        # l_hand.fingers["aux"] = aux_value
-                        # l_hand.fingers["index"] = index_value
-                        # l_hand.fingers["middle"] = middle_value
-                        # l_hand.fingers["ring"] = ring_value
-                        # l_hand.fingers["little"] = little_value
-                        # l_hand.fingers["flex"] = flex_value
-                        # print(f"左手灵巧手控制值: {left_hand_values}")
-
+                    pass
                 # 计算并打印右手灵巧手控制值
                 if 'rightHand' in message['payload'] and message['payload']['rightHand']['isTracked']:
-                    right_hand_values = calculate_hand_values(message['payload']['rightHand'])
-                    print(f"右手灵巧手控制值: {right_hand_values}")
+                    right_hand_values = hand.handle_openxr(message['payload']['rightHand'])
                     if right_hand_values != [0, 0, 0, 0, 0, 0]:
-                        # 添加上下界限制，确保值在有效范围内
-                        aux_value = max(0, min(100, int((-10+right_hand_values[0])*2)))
-                        index_value = max(0, min(100, int((-5+right_hand_values[1])*2.5)))
-                        middle_value = max(0, min(100, int((-5+right_hand_values[2])*2.5)))
-                        ring_value = max(0, min(100, int((-5+right_hand_values[3])*2.5)))
-                        little_value = max(0, min(100, int((-5+right_hand_values[4])*2.5)))
-                        flex_value = max(0, min(100, int((right_hand_values[5]))))
-
-                        fingers = {}
-                        fingers["aux"] = aux_value
-                        fingers["index"] = index_value
-                        fingers["middle"] = middle_value
-                        fingers["ring"] = ring_value
-                        fingers["little"] = little_value
-                        fingers["flex"] = flex_value
-
-                        r_hand.add_hand_data(fingers)
-                if right_hand_values[0] > 20 and right_hand_values[1] > 40 and right_hand_values[2] > 40 and right_hand_values[3] >40 and right_hand_values[4] >40:
-                    r_arm.start_control()
-                if left_hand_values[0] > 20 and left_hand_values[1] > 40 and left_hand_values[2] > 40 and left_hand_values[3] >40 and left_hand_values[4] >40:
-                    r_arm.stop_control()
+                        hand.add_hand_data(right_hand_values)
+                # if right_hand_values[0] > 20 and right_hand_values[1] > 40 and right_hand_values[2] > 40 and right_hand_values[3] >40 and right_hand_values[4] >40:
+                #     arm.start_control()
+                # if left_hand_values[0] > 20 and left_hand_values[1] > 40 and left_hand_values[2] > 40 and left_hand_values[3] >40 and left_hand_values[4] >40:
+                #     arm.stop_control()
 
             teleop.handle_socket_data(message)
         
         
-        r_arm.start()
-        r_hand.start()
+        arm.start()
+        hand.start()
         vrsocket.start() 
 
-        r_hand.start_control()
+        hand.start_control()
 
-        visualizer.start()
+        # visualizer.start()
         
         while(1):
             connect_states = [device.get_conn_status() for device in devices]
