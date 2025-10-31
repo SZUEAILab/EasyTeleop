@@ -2,6 +2,8 @@
 
 EasyTeleop 是一个基于VR设备控制机械臂的遥操作工具集。该工具集支持多种设备的集成，包括RealMan机械臂、VR头显和RealSense摄像头，并提供接口进行设备管理和遥操作控制。
 
+> 本项目已发布到PYPI，可以使用 pip 安装：`pip install easyteleop`
+
 ## 功能特性
 
 - 多设备管理：支持机械臂、VR头显和摄像头设备的统一管理
@@ -15,7 +17,7 @@ EasyTeleop 是一个基于VR设备控制机械臂的遥操作工具集。该工�
 
 本系统采用模块化架构，包含以下几个主要组件：
 
-### 核心组件 (Components)
+### 组件 (Components)
 - DataCollect: 数据采集模块
 - TeleopMiddleware: 遥操作中间件
 - Visualizer: 可视化模块
@@ -25,6 +27,7 @@ EasyTeleop 是一个基于VR设备控制机械臂的遥操作工具集。该工�
 - HandVisualizer: 手部可视化模块
 
 ### 设备模块 (Device)
+详细使用参考[设备模块文档](/docs/device.md)
 - BaseDevice: 设备基类
 - Camera: 摄像头设备（RealSenseCamera, TestCamera等）
 - Robot: 机械臂设备（RealMan, TestRobot等）
@@ -32,6 +35,7 @@ EasyTeleop 是一个基于VR设备控制机械臂的遥操作工具集。该工�
 - VR: VR设备（VRSocket, TestVR等）
 
 ### 遥操作组 (TeleopGroup)
+详细使用参考[遥操组模块文档](/docs/teleop_group.md)
 - BaseTeleopGroup: 遥操作组基类
 - SingleArmWithTriggerTeleopGroup: 单臂触发遥操作组
 - TwoArmWithTriggerTeleopGroup: 双臂触发遥操作组
