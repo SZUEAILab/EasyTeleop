@@ -1,10 +1,6 @@
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from Components import TeleopMiddleware
-from Device.VR.VRSocket import VRSocket
-from Device.Robot.RealMan import RealMan
+from EasyTeleop.Components import TeleopMiddleware
+from EasyTeleop.Device.VR import VRSocket
+from EasyTeleop.Device.Robot import RealMan
 import time
 
 if __name__ == '__main__':

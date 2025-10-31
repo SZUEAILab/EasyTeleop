@@ -2,19 +2,9 @@
 VR数据包分析器测试脚本
 用于测试和分析VR设备的数据包帧率和帧间间隔
 """
-
-import sys
-import os
 import time
-import threading
-import json
-
-# 添加项目根目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from Components.VRPacketAnalyzer import VRPacketAnalyzer
-from Device.VR.VRSocket import VRSocket
-
+from EasyTeleop.Components.VRPacketAnalyzer import VRPacketAnalyzer
+from EasyTeleop.Device.VR import VRSocket
 
 if __name__ == "__main__":
     

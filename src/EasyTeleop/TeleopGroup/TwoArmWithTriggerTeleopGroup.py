@@ -1,4 +1,4 @@
-from TeleopGroup.BaseTeleopGroup import BaseTeleopGroup
+from .BaseTeleopGroup import BaseTeleopGroup
 import threading
 import time
 import logging

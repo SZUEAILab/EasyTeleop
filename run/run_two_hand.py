@@ -2,15 +2,10 @@
 本程序测试使用手柄扳机控制末端灵巧手和机械臂的效果
 利用VR手柄的扳机控制4指的弯曲度，控制灵巧手
 """
-
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from Components import TeleopMiddleware, HandVisualizer
-from Device.VR.VRSocket import VRSocket
-from Device.Robot.RealMan import RealMan
-from Device.Hand.Revo2OnRealMan import Revo2OnRealMan
+from EasyTeleop.Components import TeleopMiddleware, HandVisualizer
+from EasyTeleop.Device.VR import VRSocket
+from EasyTeleop.Device.Robot import RealMan
+from EasyTeleop.Device.Hand import Revo2OnRealMan
 import time
 import numpy as np
     
@@ -75,7 +70,7 @@ if __name__ == '__main__':
                     l_arm.add_pose_data(_pose_quant)
 
                     left_hand_values = l_hand.handle_openxr(message['payload']['leftHand'])
-                    
+
                     if left_hand_values != [0, 0, 0, 0, 0, 0]:
                         l_hand.add_hand_data(left_hand_values)
 

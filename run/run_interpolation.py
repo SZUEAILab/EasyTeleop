@@ -1,21 +1,12 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
 插值组件测试脚本
 """
 
 import time
-import numpy as np
-import sys
-import os
 
-# 添加项目根目录到Python路径
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from Components import TeleopMiddleware,Interpolation
-from Device.VR.VRSocket import VRSocket
-from Device.Robot.RealMan import RealMan
+from EasyTeleop.Components import TeleopMiddleware, Interpolation
+from EasyTeleop.Device.VR import VRSocket
+from EasyTeleop.Device.Robot import RealMan
 
 def main():
     print("开始插值组件测试...")

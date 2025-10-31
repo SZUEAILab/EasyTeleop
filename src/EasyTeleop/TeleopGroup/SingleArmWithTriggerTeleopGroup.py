@@ -1,4 +1,4 @@
-from TeleopGroup.BaseTeleopGroup import BaseTeleopGroup
+from .BaseTeleopGroup import BaseTeleopGroup
 import threading
 import time
 import logging
@@ -6,7 +6,7 @@ import logging
 # 创建日志记录器
 logger = logging.getLogger(__name__)
 
-class SingleArmTeleopGroup(BaseTeleopGroup):
+class SingleArmWithTriggerTeleopGroup(BaseTeleopGroup):
     """单臂+VR+2摄像头的配置,启用夹爪控制,默认使用左手柄操作,A键切换采集状态"""
     
     # 遥操组类型名称

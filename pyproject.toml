@@ -4,7 +4,7 @@ version = "0.2.0"
 authors = [                         # 作者信息（支持多人）
   { name = "Chain Pray", email = "qianpurui@gmail.com" },
 ]
-description = "Easy teleoperation tool for robotic arm"
+description = "Easy teleoperate tools for robotic arm control with VR devices"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -25,19 +25,18 @@ classifiers = [
 dependencies = [
     "aiortc>=1.13.0",
     "av>=14.4.0",
-    "fastapi>=0.116.1",
     "matplotlib>=3.10.7",
     "numpy>=2.2.6",
     "opencv-python>=4.11.0.86",
-    "paho-mqtt>=2.1.0",
-    "pydantic>=2.11.7",
     "pyrealsense2>=2.56.5.9235",
-    "pyyaml>=6.0.2",
     "robotic-arm>=1.1.1",
     "scipy>=1.15.3",
-    "uuid>=1.30",
-    "uvicorn>=0.35.0",
     "websockets>=15.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "twine>=5.0.0",
 ]
 
 [build-system]
@@ -45,6 +44,6 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["."]
-include = ["Components*", "Device*", "TeleopGroup*"]
+where = ["src"]
+include = ["EasyTeleop*"]
 namespaces = false

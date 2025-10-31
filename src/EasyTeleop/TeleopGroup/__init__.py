@@ -1,7 +1,9 @@
 import os
 import importlib
 from typing import Dict, Any, Type
-import inspect
+from .BaseTeleopGroup import BaseTeleopGroup
+from .SingleArmWithTriggerTeleopGroup import SingleArmWithTriggerTeleopGroup
+from .TwoArmWithTriggerTeleopGroup import TwoArmWithTriggerTeleopGroup
 
 
 def get_teleop_group_types() -> Dict[str, Any]:

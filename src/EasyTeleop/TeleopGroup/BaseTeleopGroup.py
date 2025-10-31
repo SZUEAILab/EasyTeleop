@@ -3,8 +3,8 @@ from typing import Dict, Any, List, Callable
 import asyncio
 import threading
 import time
-from Components import TeleopMiddleware
-from Components import DataCollect
+from ..Components import TeleopMiddleware
+from ..Components import DataCollect
 
 
 class BaseTeleopGroup(ABC):

@@ -2,53 +2,45 @@
 本程序测试使用手柄扳机控制末端灵巧手和机械臂的效果
 利用VR手柄的扳机控制4指的弯曲度，控制灵巧手
 """
-
-import sys
-import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from Components import TeleopMiddleware, DataCollect
-from Device.VR.VRSocket import VRSocket
-from Device.Robot.RealMan import RealMan
-from Device.Hand.Revo2OnRealMan import Revo2OnRealMan
+from EasyTeleop.Components import TeleopMiddleware
+from EasyTeleop.Device.VR import VRSocket
+from EasyTeleop.Device.Robot import RealMan
+from EasyTeleop.Device.Hand import Revo2OnRealMan
 import time
-import math
 
 if __name__ == '__main__':
     try:
-        l_arm = RealMan({"ip": "192.168.0.17", "port": 8080})
-        l_hand = Revo2OnRealMan({"ip": "192.168.0.17", "port": 8080,"baudrate":460800, "address": 127}) 
-        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
+        arm = RealMan({"ip": "192.168.0.19", "port": 8080})
+        hand = Revo2OnRealMan({"ip": "192.168.0.19", "port": 8080,"baudrate":460800, "address": 127}) 
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         
         
-        devices = [l_arm, l_hand, vrsocket]
+        devices = [arm, hand, vrsocket]
         
         # 注册回调函数
-        teleop.on("rightPosRot",l_arm.add_pose_data)
+        teleop.on("rightPosRot",arm.add_pose_data)
         @teleop.on("rightGripTurnDown")
         def control_l_arm():
             print("开始控制机械臂")
-            l_arm.start_control()
-        teleop.on("rightGripTurnUp",l_arm.stop_control)
+            arm.start_control()
+            hand.start_control()
+        @teleop.on("rightGripTurnUp")
+        def control_l_arm_stop():
+            print("停止控制机械臂")
+            arm.stop_control()
+            hand.stop_control()
         @teleop.on("rightTrigger")
         def control_l_arm_hand(trigger):
-            l_arm.add_end_effector_data([trigger])
             # print(f"触发器原始值: {trigger}")
             trigger = int((1-trigger)*100) #限制在0-1之间
-            # print(f"触发器: {trigger}")
-            
-            # l_hand.set_fingers(fingers)
-            l_hand.fingers["aux"] = int(trigger)
-            l_hand.fingers["index"] = trigger
-            l_hand.fingers["middle"] = int(trigger)
-            l_hand.fingers["ring"] = int(trigger*0.9)
-            l_hand.fingers["little"] = int(trigger*0.8)
+            fingers = [trigger, trigger, trigger, trigger, trigger, trigger]
+            hand.add_hand_data(fingers)
         
 
         @teleop.on("rightStick")
         def stick_callback(state):
-            l_hand.fingers["flex"] = 70+int(state['x']*50)
+            pass
             # print(f"左摇杆: {state}")
 
         
@@ -56,8 +48,8 @@ if __name__ == '__main__':
         vrsocket.on("message",teleop.handle_socket_data)
         
         
-        l_arm.start()
-        l_hand.start()
+        arm.start()
+        hand.start()
         vrsocket.start() 
         
         while(1):
