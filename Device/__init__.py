@@ -1,6 +1,13 @@
 import os
 import importlib
 from typing import Dict, Type, Any
+from .BaseDevice import BaseDevice
+
+__all__ = [
+    'BaseDevice',
+    'get_device_classes',
+    'get_device_types'
+]
 
 def get_device_classes() -> Dict[str, Dict[str, Type]]:
     """
@@ -34,7 +41,7 @@ def get_device_classes() -> Dict[str, Dict[str, Type]]:
                             
                             # 检查是否为类且继承自BaseDevice
                             if (isinstance(device_class, type) and 
-                                issubclass(device_class, getattr(importlib.import_module('Device.BaseDevice'), 'BaseDevice', object))):
+                                issubclass(device_class, BaseDevice)):
                                 
                                 # 排除Base开头的类和Base+category名字的类
                                 if (not device_class.__name__.startswith('Base') and 
@@ -81,7 +88,7 @@ def get_device_types() -> Dict[str, Dict[str, Any]]:
                             
                             # 检查是否为类且继承自BaseDevice
                             if (isinstance(device_class, type) and 
-                                issubclass(device_class, getattr(importlib.import_module('Device.BaseDevice'), 'BaseDevice', object))):
+                                issubclass(device_class, BaseDevice)):
                                 
                                 # 排除Base开头的类和Base+category名字的类，并检查是否有need_config属性
                                 if (not device_class.__name__.startswith('Base') and 
