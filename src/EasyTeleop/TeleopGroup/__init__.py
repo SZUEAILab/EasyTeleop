@@ -25,8 +25,8 @@ def get_teleop_group_types() -> Dict[str, Any]:
             module_name = filename[:-3]
             
             try:
-                # 动态导入模块
-                module = importlib.import_module(f'TeleopGroup.{module_name}')
+                # 动态导入模块 - 使用相对导入路径
+                module = importlib.import_module(f'.{module_name}', package='EasyTeleop.TeleopGroup')
                 
                 # 查找模块中的类（非基类且继承自BaseTeleopGroup）
                 for attr_name in dir(module):
@@ -41,7 +41,7 @@ def get_teleop_group_types() -> Dict[str, Any]:
                         break
                         
             except Exception as e:
-                print(f"导入模块 {module_name} 时出错: {e}")
+                print(f"导入模块 EasyTeleop.TeleopGroup.{module_name} 时出错: {e}")
     
     return teleop_group_types
 
@@ -65,8 +65,8 @@ def get_teleop_group_classes() -> Dict[str, Type]:
             module_name = filename[:-3]
             
             try:
-                # 动态导入模块
-                module = importlib.import_module(f'TeleopGroup.{module_name}')
+                # 动态导入模块 - 使用相对导入路径
+                module = importlib.import_module(f'.{module_name}', package='EasyTeleop.TeleopGroup')
                 
                 # 查找模块中的类（非基类且继承自BaseTeleopGroup）
                 for attr_name in dir(module):
@@ -81,6 +81,6 @@ def get_teleop_group_classes() -> Dict[str, Type]:
                         break
                         
             except Exception as e:
-                print(f"导入模块 {module_name} 时出错: {e}")
+                print(f"导入模块 EasyTeleop.TeleopGroup.{module_name} 时出错: {e}")
     
     return teleop_group_classes

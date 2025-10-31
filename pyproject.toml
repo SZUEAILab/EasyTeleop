@@ -1,10 +1,10 @@
 [project]
 name = "EasyTeleop"
-version = "0.2.0"
+version = "0.2.1"
 authors = [                         # 作者信息（支持多人）
   { name = "Chain Pray", email = "qianpurui@gmail.com" },
 ]
-description = "Easy teleoperate tools for robotic arm control with VR devices"
+description = "Easy teleoperate tools for robotic devices control with VR headset"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { file = "LICENSE" }
@@ -32,11 +32,6 @@ dependencies = [
     "robotic-arm>=1.1.1",
     "scipy>=1.15.3",
     "websockets>=15.0.1",
-]
-
-[project.optional-dependencies]
-dev = [
-    "twine>=5.0.0",
 ]
 
 [build-system]

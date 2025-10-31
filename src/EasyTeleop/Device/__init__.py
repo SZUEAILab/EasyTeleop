@@ -32,8 +32,8 @@ def get_device_classes() -> Dict[str, Dict[str, Type]]:
                     module_name = filename[:-3]
                     
                     try:
-                        # 动态导入模块
-                        module = importlib.import_module(f'Device.{category}.{module_name}')
+                        # 动态导入模块 - 使用相对导入路径
+                        module = importlib.import_module(f'.{category}.{module_name}', package='EasyTeleop.Device')
                         
                         # 尝试获取与模块名相同的类
                         if hasattr(module, module_name):
@@ -51,7 +51,7 @@ def get_device_classes() -> Dict[str, Dict[str, Type]]:
                                     device_classes[category][device_class.__name__] = device_class
                                 
                     except Exception as e:
-                        print(f"导入模块 Device.{category}.{module_name} 时出错: {e}")
+                        print(f"导入模块 EasyTeleop.Device.{category}.{module_name} 时出错: {e}")
     
     return device_classes
 
@@ -79,8 +79,8 @@ def get_device_types() -> Dict[str, Dict[str, Any]]:
                     module_name = filename[:-3]
                     
                     try:
-                        # 动态导入模块
-                        module = importlib.import_module(f'Device.{category}.{module_name}')
+                        # 动态导入模块 - 使用相对导入路径
+                        module = importlib.import_module(f'.{category}.{module_name}', package='EasyTeleop.Device')
                         
                         # 尝试获取与模块名相同的类
                         if hasattr(module, module_name):
@@ -98,6 +98,6 @@ def get_device_types() -> Dict[str, Dict[str, Any]]:
                                     # 使用类名作为type
                                     device_types[category][device_class.__name__] = device_class.get_type_info()
                     except Exception as e:
-                        print(f"导入模块 Device.{category}.{module_name} 时出错: {e}")
+                        print(f"导入模块 EasyTeleop.Device.{category}.{module_name} 时出错: {e}")
     
     return device_types
