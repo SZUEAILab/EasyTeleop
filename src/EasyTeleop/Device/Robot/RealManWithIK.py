@@ -6,13 +6,40 @@ from threading import Lock
 from typing import Dict, Any
 from collections import deque
 from .BaseRobot import BaseRobot
+from .Realman_IK.ik_qp import QPIK
+# from .Realman_IK.ik_rbtdef import *
+# from .Realman_IK.ik_rbtutils import *
 
-class RealMan(BaseRobot):
+def pose_to_matrix(x, y, z, roll, pitch, yaw):
+    Rz = np.array([
+        [np.cos(yaw), -np.sin(yaw), 0],
+        [np.sin(yaw),  np.cos(yaw), 0],
+        [0,            0,           1]
+    ])
+    Ry = np.array([
+        [ np.cos(pitch), 0, np.sin(pitch)],
+        [ 0,             1, 0],
+        [-np.sin(pitch), 0, np.cos(pitch)]
+    ])
+    Rx = np.array([
+        [1, 0,            0],
+        [0, np.cos(roll), -np.sin(roll)],
+        [0, np.sin(roll),  np.cos(roll)]
+    ])
+    R = Rz @ Ry @ Rx  # 旋转矩阵
+
+    # 齐次变换矩阵
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = [x, y, z]
+    return T
+
+class RealManWithIK(BaseRobot):
     """
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
     # 定义需要的配置字段为静态字段
-    name = "睿尔曼R75机械臂"
+    name = "睿尔曼R75b机械臂"
     description = "用于控制RealMan机械臂的机器人控制器"
     need_config = {
         "ip": {
@@ -44,8 +71,13 @@ class RealMan(BaseRobot):
         self.prev_tech_state = None
         self.arm_first_state = None
         self.gripper_close = False
-        self.delta = [0, 0, 0 , 0 , 0 , 0]
-        
+        self.delta = None
+
+        self.q_last = None
+
+        self.dT = 0.02
+
+        self.ik = QPIK("RM75B", self.dT)
         
         
     
@@ -62,6 +94,7 @@ class RealMan(BaseRobot):
                 self.emit("joint",self.current_joint_data)#调用回调函数
             else:
                 raise RuntimeError("Failed to get arm state")
+
         
             # 获取夹爪状态
             succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
@@ -89,6 +122,7 @@ class RealMan(BaseRobot):
 
             # 获取手臂状态
             succ, arm_state = self.arm_controller.rm_get_current_arm_state()
+            # print(arm_state)
             if not succ:
                 self.current_pose_data = arm_state["pose"]
                 self.current_joint_data = arm_state["joint"]
@@ -101,6 +135,8 @@ class RealMan(BaseRobot):
                 self.current_end_effector_data = gripper_state
             else:
                 raise RuntimeError("Failed to get gripper state")
+            
+            self.setik()
                     
             return True
             
@@ -108,7 +144,20 @@ class RealMan(BaseRobot):
             self.arm_controller.rm_delete_robot_arm()
             return False
         
-    
+    def setik(self):
+        try:
+            tool_frame = self.arm_controller.rm_get_current_tool_frame()[1]['pose']
+            world_frame = self.arm_controller.rm_get_current_work_frame()[1]['pose']
+            install_angel = self.arm_controller.rm_get_install_pose()
+            self.ik.set_install_angle([install_angel['x'], install_angel['y'], install_angel['z']], 'deg')
+            self.ik.set_work_cs_params(world_frame)
+            self.ik.set_tool_cs_params(tool_frame)
+            # self.ik.set_7dof_elbow_min_angle(3, 'deg')
+            # self.ik.set_7dof_q3_min_angle(-30, 'deg')
+            # self.ik.set_7dof_q3_max_angle(30, 'deg')
+            self.ik.set_dq_max_weight([1.0, 1.0, 1.0, 1.0, 0.1, 1.0, 1.0])
+        except Exception as e:
+            print(f"Error setting IK parameters: {str(e)}") 
     
     def _disconnect_device(self) -> bool:
         """
@@ -150,9 +199,6 @@ class RealMan(BaseRobot):
         """获取当前状态（线程安全）"""
         return self.current_pose_data.copy() if self.current_pose_data is not None else None
 
-    def get_end_effector_data(self):
-        """获取当前夹爪状态（线程安全）"""
-        return self.current_end_effector_data
     
     def start_control(self, state=None, trigger=None):
         """开始控制手臂，启动控制线程"""
@@ -186,6 +232,7 @@ class RealMan(BaseRobot):
     def _control_loop(self):
         """控制线程主循环"""
         while self.control_thread_running:
+            control_start = time.time()
             # 处理位姿队列，只取最新的一帧数据
             pose_data = None
             if self.pose_queue:
@@ -197,11 +244,14 @@ class RealMan(BaseRobot):
                     # 初始化状态
                     self.prev_tech_state = pose_data
                     self.arm_first_state = self.get_pose_data()
+                    self.q_last = np.deg2rad(self.get_joint_data())
+                    print(self.q_last)
                     self.delta = [0, 0, 0, 0, 0, 0, 0]
                 else:
+                    
                     # 执行位姿控制
                     if len(pose_data) == 6:
-                        self.move(pose_data)
+                        self.movej(pose_data)
                     elif len(pose_data) == 7:
                         self.moveq(pose_data)
             
@@ -214,7 +264,11 @@ class RealMan(BaseRobot):
             if gripper_data is not None:
                 self.set_gripper(gripper_data)
             
-            time.sleep(0.001)  # 控制循环频率
+            control_end = time.time()
+            # print(control_end - control_start)
+            control_sleep = self.dT - (control_end - control_start)
+            if control_sleep > 0:
+                time.sleep(control_sleep)
 
     def move(self, tech_state):
         """欧拉角控制"""
@@ -235,6 +289,50 @@ class RealMan(BaseRobot):
         ] 
         
         success = self.arm_controller.rm_movep_canfd(next_state, False, 0, 80)
+
+    def movej(self, tech_state):
+        """欧拉角控制"""
+        for i in range(6):
+            self.delta[i] = tech_state[i] - self.prev_tech_state[i]
+        # self.prev_tech_state = tech_state.copy()
+        hand_x = self.arm_first_state[0] + self.delta[0]
+        hand_y = self.arm_first_state[1] + self.delta[1]
+        hand_z = self.arm_first_state[2] + self.delta[2]
+        hand_roll = self.arm_first_state[3] + self.delta[3]
+        hand_pitch = self.arm_first_state[4] + self.delta[4]
+        hand_yaw = self.arm_first_state[5] + self.delta[5]
+
+        # x, y, z, roll, pitch, yaw = self.hand_to_base_transform(
+        #     hand_x, hand_y, hand_z, hand_roll, hand_pitch, hand_yaw
+        # )
+        # x, y, z, roll, pitch, yaw = tech_state
+        # Td = pose_to_matrix(x, y, z, roll, pitch, yaw)
+        Td = pose_to_matrix(hand_x, hand_y, hand_z, hand_roll, hand_pitch, hand_yaw)
+        # print("!!!!!!!!!!!!!!!!!1self.q_last:", self.q_last)
+        q_solve = self.ik.sovler(self.q_last,Td)
+
+        # 计算 FK，检查误差
+        T_check = self.ik.fkine(q_solve)
+        pos_err = np.linalg.norm(Td[:3, 3] - T_check[:3, 3]) * 1000  # mm
+        cos_angle = (np.trace(Td[:3, :3].T @ T_check[:3, :3]) - 1) / 2
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)  # 避免数值误差
+        rot_err = np.degrees(np.arccos(cos_angle))
+
+        # 打印调试信息
+        # print("输入 tech_state:", tech_state)
+        # print("q_last (deg):", np.degrees(self.q_last))
+        # print("q_solve (deg):", np.degrees(q_solve))
+        # print("Δq (deg):", np.degrees(q_solve - self.q_last))
+        # print(f"位置误差: {pos_err:.3f} mm, 姿态误差: {rot_err:.3f} °")
+        # print(f"姿态误差: {rot_err:.3f} °")
+
+        # 误差检查
+        # if pos_err > 10 or rot_err > 5:
+        #     print("[WARN] IK 未收敛，忽略本次指令")
+        #     return
+        
+        self.q_last = q_solve
+        self.arm_controller.rm_movej_canfd(np.degrees(q_solve).tolist(),False,0,0,50)
     def moveRemote(self, tech_state):
         # 计算手柄在世界坐标系中的位移增量
         delta_x = tech_state[0] - self.prev_tech_state[0]
@@ -328,6 +426,8 @@ class RealMan(BaseRobot):
 
     def move_init(self, state):
         return self.arm_controller.rm_movej(state, 20, 0, 0, 1)
+    
+    
         
     def set_gripper(self, gripper):
         if gripper < 0.20 and not self.gripper_close:

@@ -15,6 +15,7 @@ class BaseRobot(BaseDevice):
 
         self._events.update({
             "pose": self._default_callback,
+            "joint": self._default_callback,
             "end_effector": self._default_callback
         })
 
@@ -24,6 +25,7 @@ class BaseRobot(BaseDevice):
 
         self.current_pose_data = None
         self.current_end_effector_data = None
+        self.current_joint_data = None
 
         # 控制线程
         self.is_controlling = False
@@ -62,6 +64,13 @@ class BaseRobot(BaseDevice):
         :return: 末端执行器数据
         """
         return self.current_end_effector_data
+    
+    def get_joint_data(self) -> list:
+        """
+        获取当前机器人关节数据
+        :return: 关节数据
+        """
+        return self.current_joint_data
 
     @abstractmethod
     def start_control(self) -> None:

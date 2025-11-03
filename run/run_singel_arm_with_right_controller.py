@@ -1,11 +1,14 @@
 from EasyTeleop.Components import TeleopMiddleware
 from EasyTeleop.Device.VR import VRSocket
-from EasyTeleop.Device.Robot import RealMan
+from EasyTeleop.Device.Robot import RealManWithIK
 import time
 
 if __name__ == '__main__':
     try:
-        arm = RealMan({"ip": "192.168.0.19", "port": 8080})
+        start_time = 0
+        package_count = 0
+        
+        arm = RealManWithIK({"ip": "192.168.0.18", "port": 8080})
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         
@@ -18,7 +21,16 @@ if __name__ == '__main__':
         teleop.on("rightTrigger",arm.add_end_effector_data)
         
         #注册回调函数
-        vrsocket.on("message",teleop.handle_socket_data)
+        @vrsocket.on("message")
+        def handle_socket_data(data):
+            # global start_time, package_count
+            # if(start_time == 0):
+            #     start_time = time.time()
+            #     ackage_count += 1
+            # else:
+            #     package_count += 1
+            #     print(f"fps{package_count / (time.time() - start_time):.2f}")
+            teleop.handle_socket_data(data)
 
         arm.start()
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响

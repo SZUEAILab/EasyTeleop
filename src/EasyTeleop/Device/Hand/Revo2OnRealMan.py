@@ -130,7 +130,7 @@ class Revo2OnRealMan(BaseHand):
             hand_data: OpenXR手部数据，包含joints数组和rootPose
             
         Returns:
-            list: 6个0-100的值，分别对应拇指、食指、中指、无名指、小指的弯曲程度和拇指收拢程度
+            list: 6个0-100的值，分别对应拇指收拢、拇指弯曲、中指弯曲、食指弯曲、小指弯曲、无名指弯曲
         """
         if not hand_data or not hand_data.get('isTracked') or not hand_data.get('joints'):
             return [0, 0, 0, 0, 0, 0]
@@ -322,7 +322,7 @@ class Revo2OnRealMan(BaseHand):
             )
             thumb_towards_palm = (thumb_towards_palm-5)*1.5
             
-            # 返回6个值：拇指弯曲、食指弯曲、中指弯曲、无名指弯曲、小指弯曲、拇指收拢
+            # 返回6个值：拇指收拢、拇指弯曲、中指弯曲、食指弯曲、小指弯曲、无名指弯曲
             thumb_towards_palm = max(0, min(100, int(thumb_towards_palm)))
             thumb_bend = max(0, min(100, int(thumb_bend)))
             middle_bend = max(0, min(100, int(middle_bend)))
