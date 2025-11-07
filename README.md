@@ -12,6 +12,7 @@ EasyTeleop 是一个基于VR设备控制机械臂的遥操作工具集。该工�
 - 数据采集：支持遥操作过程中的数据采集和存储
 - WebRTC视频流传输：支持低延迟视频流传输
 - 可视化：提供姿态可视化功能
+- qpSWIFT优化：集成qpSWIFT二次规划求解器，用于机器人逆运动学求解
 
 ## 系统架构
 
@@ -49,13 +50,13 @@ EasyTeleop 是一个基于VR设备控制机械臂的遥操作工具集。该工�
 
 ### 安装依赖
 
-使用uv管理项目依赖：
+使用uv管理项目依赖：(不能uv sync因为编辑式安装不能编译C拓展)
 ```bash
 # 安装uv（如果尚未安装）
 pip install uv
 
 # 安装项目依赖
-uv sync
+uv pip install -e .
 
 ```
 
@@ -66,6 +67,55 @@ uv sync
 - robotic-arm: 机械臂控制库
 - numpy, scipy: 科学计算
 - matplotlib: 数据可视化
+- qpSWIFT: 二次规划求解器（已集成到包中）
+
+## 安装与依赖（新版）
+
+### 环境要求
+- Python 3.10+
+- Windows/Linux/macOS（建议官方 Python 或 Conda）
+- 可选：uv 包管理器（更快的 pip 替代品）
+
+### 正式安装（推荐）
+- 从 PyPI 安装（wheel 已内置 qpSWIFT 扩展，开箱即用）
+```bash
+pip install easyteleop
+```
+
+### 开发者安装（本地源码 + 编译内置 qpSWIFT）
+- 需要本地 C/C++ 构建环境：
+  - Windows：Visual Studio Build Tools（含“使用 C++ 的桌面开发”组件）
+  - Linux：gcc/clang 与基础构建工具
+  - macOS：Xcode Command Line Tools
+- 注意：仅执行 `uv sync` 只会安装第三方依赖，不会安装（编译）本包本身；必须安装本包才会编译 qpSWIFT 扩展。
+
+使用 uv（推荐）：
+```bash
+pip install uv  # 如未安装
+uv pip install -e .
+```
+
+或使用 pip：
+```bash
+pip install -e .
+```
+
+安装完成后验证：
+```bash
+python -c "import EasyTeleop, qpSWIFT; print('OK')"
+```
+
+### 从源码构建 Wheel（用于分发）
+```bash
+uv build            # 生成 sdist 与 wheel
+# 或仅生成 wheel：
+uv build --wheel
+```
+构建好的 wheel 中已内置编译完成的 `qpSWIFT` 扩展（与当前平台/解释器匹配）。
+
+### 主要依赖（摘要）
+- aiortc, opencv-python, pyrealsense2, robotic-arm, numpy, scipy, matplotlib
+- qpSWIFT（二次规划求解器，已随包集成并在安装时编译/或随 wheel 分发）
 
 ## 使用方法
 

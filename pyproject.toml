@@ -7,13 +7,13 @@ authors = [                         # 作者信息（支持多人）
 description = "Easy teleoperate tools for robotic devices control with VR headset"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "MIT"
+license-files = ["LICENSE"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
@@ -29,20 +29,15 @@ dependencies = [
     "numpy>=2.2.6",
     "opencv-python>=4.11.0.86",
     "pyrealsense2>=2.56.5.9235",
-    "qpswift>=1.0.0",
     "robotic-arm>=1.1.1",
     "scipy>=1.15.3",
     "websockets>=15.0.1",
 ]
 
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "numpy>=1.22"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["EasyTeleop*"]
-namespaces = false
-
-[tool.uv.sources]
-qpSWIFT = { path = "./src/qp-tools/python", editable = true }
+[tool.setuptools]
+package-dir = {"" = "src"}
+packages = { find = { where = ["src"], include = ["EasyTeleop*"] } }
