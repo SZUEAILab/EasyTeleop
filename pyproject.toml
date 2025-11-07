@@ -1,6 +1,6 @@
 [project]
 name = "EasyTeleop"
-version = "0.2.2"
+version = "0.2.3"
 authors = [                         # 作者信息（支持多人）
   { name = "Chain Pray", email = "qianpurui@gmail.com" },
 ]
