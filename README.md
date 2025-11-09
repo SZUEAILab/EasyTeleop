@@ -48,6 +48,21 @@ EasyTeleop 是一个基于VR设备控制机械臂的遥操作工具集。该工�
 - Windows/Linux/macOS
 - uv 包管理器
 
+### 克隆仓库（包含子模块）
+
+由于项目使用了 Git 子模块（qp-tools），需要特殊处理来完整克隆仓库：
+
+```bash
+# 方法1：克隆时初始化子模块
+git clone --recurse-submodules https://github.com/Chain-Pray/EasyTeleop.git
+
+# 方法2：克隆后手动初始化和更新子模块
+git clone https://github.com/Chain-Pray/EasyTeleop.git
+cd EasyTeleop
+git submodule init
+git submodule update
+```
+
 ### 安装依赖
 
 使用uv管理项目依赖：(不能uv sync因为编辑式安装不能编译C拓展)
@@ -84,7 +99,7 @@ pip install easyteleop
 
 ### 开发者安装（本地源码 + 编译内置 qpSWIFT）
 - 需要本地 C/C++ 构建环境：
-  - Windows：Visual Studio Build Tools（含“使用 C++ 的桌面开发”组件）
+  - Windows：Visual Studio Build Tools（含"使用 C++ 的桌面开发"组件）
   - Linux：gcc/clang 与基础构建工具
   - macOS：Xcode Command Line Tools
 - 注意：仅执行 `uv sync` 只会安装第三方依赖，不会安装（编译）本包本身；必须安装本包才会编译 qpSWIFT 扩展。
