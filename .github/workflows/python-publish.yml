@@ -30,10 +30,8 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Build release distributions
-        run: |
-          # Install build dependencies
-          uv pip install build
-          # Build the package with uv
+        run: 
+          uv pip sync
           uv build
 
       - name: Upload distributions
