@@ -1,3 +1,6 @@
+[submodule "src/unitree_sdk2py"]
+	path = src/unitree_sdk2py
+	url = https://github.com/unitreerobotics/unitree_sdk2_python.git
 [submodule "src/qp-tools"]
 	path = src/qp-tools
 	url = https://github.com/qpSWIFT/qpSWIFT.git
