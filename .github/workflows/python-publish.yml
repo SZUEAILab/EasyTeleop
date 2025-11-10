@@ -30,7 +30,7 @@ jobs:
       # （可选）如需控制 cibuildwheel 的 Python 版本/架构/排除项
       # 这里示例：构建 cp310/311/312；跳过 i686；Linux 架构构建 x86_64
       - name: Build wheels via cibuildwheel
-        uses: pypa/cibuildwheel@v2
+        uses: pypa/cibuildwheel@v2.19.2
         env:
           CIBW_BUILD: "cp310-* cp311-* cp312-*"
           CIBW_SKIP: "pp* *-win32 *-manylinux_i686 *-musllinux_i686"
