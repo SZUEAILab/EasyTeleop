@@ -4,7 +4,7 @@
 """
 from EasyTeleop.Components import TeleopMiddleware, HandVisualizer
 from EasyTeleop.Device.VR import VRSocket
-from EasyTeleop.Device.Robot import RealMan
+from EasyTeleop.Device.Robot import RealManWithIK
 from EasyTeleop.Device.Hand import Revo2OnRealMan
 import time
 import numpy as np
@@ -39,9 +39,11 @@ def euler_from_quaternion(quat):
 
 if __name__ == '__main__':
     try:
-        r_arm = RealMan({"ip": "192.168.0.19", "port": 8080})
+        is_control = False
+
+        r_arm = RealManWithIK({"ip": "192.168.0.19", "port": 8080})
         r_hand = Revo2OnRealMan({"ip": "192.168.0.19", "port": 8080,"baudrate":460800, "address": 127}) 
-        l_arm = RealMan({"ip": "192.168.0.18", "port": 8080})
+        l_arm = RealManWithIK({"ip": "192.168.0.18", "port": 8080})
         l_hand = Revo2OnRealMan({"ip": "192.168.0.18", "port": 8080,"baudrate":460800, "address": 126})
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
@@ -54,6 +56,7 @@ if __name__ == '__main__':
         #注册回调函数
         @vrsocket.on("message")
         def teleop_handle_socket_data(message):
+            global is_control
             if message['type'] == "hand":
                 visualizer.add_data(message['payload'])
                 left_hand_values = [0, 0, 0, 0, 0, 0]
@@ -96,6 +99,18 @@ if __name__ == '__main__':
                 # if left_hand_values[0] > 20 and left_hand_values[1] > 40 and left_hand_values[2] > 40 and left_hand_values[3] >40 and left_hand_values[4] >40:
                 #     l_arm.start_control()
                 #     r_arm.start_control()
+                if left_hand_values[1] > 50 and left_hand_values[2] > 80 and left_hand_values[3] > 80 and left_hand_values[4] >80 and left_hand_values[5] >80 and right_hand_values[1] > 50 and right_hand_values[2] > 80 and right_hand_values[3] > 80 and right_hand_values[4] >80 and right_hand_values[5] >80:
+                    if is_control:
+                        is_control = False
+                        print("停止控制机械臂")
+                        l_arm.stop_control()
+                        r_arm.stop_control()
+                else:
+                    if not is_control:
+                        is_control = True
+                        print("开始控制机械臂")
+                        l_arm.start_control()
+                        r_arm.start_control()
 
             teleop.handle_socket_data(message)
         

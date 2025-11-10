@@ -1,0 +1,5 @@
+include src/qp-tools/python/pyqpSWIFT.c
+include src/qp-tools/src/*.c
+include src/qp-tools/include/*.h
+include src/qp-tools/LICENSE
+include src/qp-tools/README.md

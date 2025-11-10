@@ -1,0 +1,3 @@
+[submodule "src/qp-tools"]
+	path = src/qp-tools
+	url = https://github.com/qpSWIFT/qpSWIFT.git

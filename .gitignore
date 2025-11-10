@@ -9,6 +9,15 @@ wheels/
 # Virtual environments
 .venv
 
+# 编译生成的文件
+*.so
+*.dylib
+*.dll
+*.pyd
+
+# Wheel相关
+*.whl
+
 *.yaml
 
 *.db
@@ -16,3 +25,5 @@ wheels/
 
 datasets/*
 test/*
+
+.vscode/

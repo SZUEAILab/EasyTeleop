@@ -1,6 +1,6 @@
 from EasyTeleop.Components import TeleopMiddleware, DataCollect
 from EasyTeleop.Device.VR import VRSocket
-from EasyTeleop.Device.Robot import RealMan
+from EasyTeleop.Device.Robot import RealMan,RealManWithIK
 from EasyTeleop.Device.Camera import RealSenseCamera
 import time
 
@@ -8,9 +8,9 @@ if __name__ == '__main__':
     try:
         RealSenseCamera.find_device()
         dc = DataCollect()
-        l_arm = RealMan({"ip": "192.168.0.18", "port": 8080})
-        r_arm = RealMan({"ip": "192.168.0.19", "port": 8080})
-        vrsocket = VRSocket({"ip": '192.168.0.20', "port": 12345})
+        l_arm = RealManWithIK({"ip": "192.168.0.18", "port": 8080})
+        r_arm = RealManWithIK({"ip": "192.168.0.19", "port": 8080})
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         camera1 = RealSenseCamera({"serial":"153122070447","target_fps": 30}) 
         
