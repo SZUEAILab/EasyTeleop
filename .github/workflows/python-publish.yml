@@ -1,11 +1,3 @@
-# This workflow will upload a Python Package to PyPI when a release is created
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python#publishing-to-package-registries
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
 name: Upload Python Package
 
 on:
@@ -16,9 +8,56 @@ permissions:
   contents: read
 
 jobs:
-  release-build:
-    runs-on: ubuntu-latest
+  # 1) 使用 cibuildwheel 为三大平台构建 wheels
+  build-wheels:
+    name: Build wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
 
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Initialize and update submodules
+        run: |
+          git submodule init
+          git submodule update
+
+      # （可选）如需控制 cibuildwheel 的 Python 版本/架构/排除项
+      # 这里示例：构建 cp310/311/312；跳过 i686；Linux 架构构建 x86_64
+      - name: Build wheels via cibuildwheel
+        uses: pypa/cibuildwheel@v2
+        env:
+          CIBW_BUILD: "cp310-* cp311-* cp312-*"
+          CIBW_SKIP: "pp* *-win32 *-manylinux_i686 *-musllinux_i686"
+          CIBW_ARCHS_LINUX: "x86_64"
+          # 如需 aarch64（会用 QEMU 仿真，较慢），取消下一行注释并在 Linux 下启用 QEMU：
+          # CIBW_ARCHS_LINUX: "x86_64 aarch64"
+          # CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"   # 需要更老 glibc 时可换 2_17
+          # CIBW_ENVIRONMENT: "PIP_ONLY_BINARY=:all:"        # 需要强制二进制依赖时使用
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ runner.os }}
+          path: wheelhouse/*.whl
+
+    # 仅当在 Linux 上开启 aarch64 构建时需要 QEMU：
+    # 绕不开时可以加（并仅在 ubuntu-latest 里生效）
+    # steps 之前加：
+    # - name: Enable QEMU (Linux only, optional)
+    #   if: matrix.os == 'ubuntu-latest'
+    #   uses: docker/setup-qemu-action@v3
+    #   with:
+    #     platforms: all
+
+  # 2) 单独构建 sdist（一次即可）
+  build-sdist:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
@@ -33,47 +72,51 @@ jobs:
         with:
           python-version: "3.x"
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v3
-
-      - name: Build release distributions
+      - name: Build sdist
         run: |
-          uv sync
-          uv build
+          python -m pip install -U build
+          python -m build -s
 
-      - name: Upload distributions
+      - name: Upload sdist artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-dists
-          path: dist/
+          name: sdist
+          path: dist/*.tar.gz
 
+  # 3) 汇总并发布到 PyPI（Trusted Publishing）
   pypi-publish:
     runs-on: ubuntu-latest
     needs:
-      - release-build
+      - build-wheels
+      - build-sdist
     permissions:
-      # IMPORTANT: this permission is mandatory for trusted publishing
-      id-token: write
+      id-token: write   # Trusted Publishing 必需
+      contents: read
 
-    # Dedicated environments with protections for publishing are strongly recommended.
-    # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
+    # 强烈建议使用受保护的环境（与 PyPI Trusted Publisher 绑定）
     environment:
       name: pypi
-      # OPTIONAL: uncomment and update to include your PyPI project URL in the deployment status:
-      # url: https://pypi.org/p/YOURPROJECT
-      #
-      # ALTERNATIVE: if your GitHub Release name is the PyPI project version string
-      # ALTERNATIVE: exactly, uncomment the following line instead:
-      # url: https://pypi.org/project/YOURPROJECT/${{ github.event.release.name }}
+      url: https://pypi.org/project/EasyTeleop/${{ github.event.release.name }}
 
     steps:
-      - name: Retrieve release distributions
+      - name: Download all artifacts (wheels)
         uses: actions/download-artifact@v4
         with:
-          name: release-dists
+          pattern: wheels-*
+          merge-multiple: true
           path: dist/
+
+      - name: Download sdist
+        uses: actions/download-artifact@v4
+        with:
+          name: sdist
+          path: dist/
+
+      - name: List dists (debug)
+        run: ls -al dist
 
       - name: Publish release distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          # attestations: true   # 需要可开启
