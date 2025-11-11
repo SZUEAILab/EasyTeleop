@@ -23,8 +23,8 @@ from unitree_sdk2py.idl.default import unitree_hg_msg_dds__LowState_
 def lowstate_callback(msg: LowState_):
     """低状态消息回调函数"""
     print(f"接收到低状态消息:")
-    print(f"  时间戳: {msg.stamp}")
-    print(f"  模式: {msg.mode}")
+    print(f"  时间戳: {msg.tick}")
+    print(f"  模式: {msg.mode_pr}")
     print(f"  部分关节角度: {[msg.motor_state[i].q for i in range(min(10, len(msg.motor_state)))]}")
     print("-" * 50)
 
@@ -43,7 +43,7 @@ def main():
         print(f"DDS通道初始化失败: {e}")
         print("尝试使用其他可能的网络接口...")
         try:
-            ChannelFactoryInitialize(0, "Realtek PCIe GbE Family Controller")
+            ChannelFactoryInitialize(0, "eth1")
             print("DDS通道初始化成功")
         except Exception as e2:
             print(f"DDS通道初始化仍然失败: {e2}")
