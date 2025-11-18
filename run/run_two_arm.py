@@ -13,12 +13,23 @@ if __name__ == '__main__':
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         camera1 = RealSenseCamera({"serial":"153122070447","target_fps": 30}) 
+        camera2 = RealSenseCamera({"serial":"427622270438","target_fps": 30}) 
+        camera3 = RealSenseCamera({"serial":"427622270277","target_fps": 30}) 
         
-        devices = [l_arm, r_arm, vrsocket, camera1]
+        devices = [l_arm, r_arm, vrsocket, camera1,camera2,camera3]
         
         @camera1.on("frame")
         def show_frame(frame):
-            dc.put_video_frame(frame)
+            dc.put_video_frame(frame,camera_id=0)
+
+        @camera2.on("frame")
+        def show_frame(frame):
+            dc.put_video_frame(frame,camera_id=1)
+
+        @camera3.on("frame")
+        def show_frame(frame):
+            dc.put_video_frame(frame,camera_id=2)
+            
         
         # 创建一个函数来处理机器人状态数据，将其格式化为(pose, joints)元组
         def handle_robot_state(timestamp=None):
