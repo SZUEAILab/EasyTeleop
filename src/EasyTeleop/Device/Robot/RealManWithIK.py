@@ -87,7 +87,6 @@ class RealManWithIK(BaseRobot):
             last_time = time.time()
             succ, arm_state = self.arm_controller.rm_get_current_arm_state()
             if not succ:
-                
                 self.current_pose_data = arm_state["pose"]
                 self.current_joint_data = arm_state["joint"]
                 self.emit("pose",self.current_pose_data)#调用回调函数
@@ -99,8 +98,8 @@ class RealManWithIK(BaseRobot):
             # 获取夹爪状态
             succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
             if not succ_gripper:
-                self.current_end_effector_data = gripper_state
-                self.emit("end_effector",self.current_end_effector_data)#调用回调函数
+                self.current_end_effector_data = gripper_state['actpos']
+                self.emit("end_effector",[self.current_end_effector_data])#调用回调函数
             else:
                 raise RuntimeError("Failed to get gripper state")
             # 帧率控制，而不是固定间隔
