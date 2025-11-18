@@ -16,17 +16,20 @@ class DataCollect:
 
         self.video_queue = queue.Queue()
         self.state_queue = queue.Queue()
+        self.gripper_queue = queue.Queue()
         self.running = False
         self.save_dir = save_dir
         self.capture_state = 0  # 0: not capturing, 1: capturing
         self.session_timestamp = None
         self.metadata = {}
-        self.pose_file = None
-        self.joint_file = None
+        self.pose_files = {}  # 为每个臂创建独立的文件
+        self.joint_files = {}
+        self.gripper_files = {}
         self.video_dir = None
         os.makedirs(self.save_dir, exist_ok=True)
         self.video_consumer_thread = None
         self.state_consumer_thread = None
+        self.gripper_consumer_thread = None
 
     def on(self, event_name: str, callback: Callable = None) -> Callable:
         """
@@ -113,11 +116,17 @@ class DataCollect:
             ts = time.time()
         self.video_queue.put((ts, frame, camera_id))
 
-    def put_robot_state(self, state, ts=None):
-        """向机械臂状态队列添加状态（state为包含pose和joint的元组），附带时间戳"""
+    def put_robot_state(self, state, arm_id=0, ts=None):
+        """向机械臂状态队列添加状态（state为包含pose和joint的元组），附带时间戳和臂ID"""
         if ts is None:
             ts = time.time()
-        self.state_queue.put((ts, state))
+        self.state_queue.put((ts, state, arm_id))
+
+    def put_gripper_state(self, gripper_state, arm_id=0, ts=None):
+        """向夹爪状态队列添加状态，附带时间戳和臂ID"""
+        if ts is None:
+            ts = time.time()
+        self.gripper_queue.put((ts, gripper_state, arm_id))
 
     def set_capture_state(self, state) -> bool:
         """设置采集状态"""
@@ -143,20 +152,31 @@ class DataCollect:
         self.session_timestamp = time.strftime("%Y%m%d_%H%M%S")
         session_dir = os.path.join(self.save_dir, self.session_timestamp)
         self.video_dir = os.path.join(session_dir, "frames")
-        self.pose_file = os.path.join(session_dir, "poses.csv")
-        self.joint_file = os.path.join(session_dir, "joints.csv")
         
+        # 为每个臂创建独立的数据文件
+        for arm_id in [0, 1]:  # 支持两个臂
+            arm_dir = os.path.join(session_dir, f"arm_{arm_id}")
+            os.makedirs(arm_dir, exist_ok=True)
+            
+            self.pose_files[arm_id] = os.path.join(arm_dir, "poses.csv")
+            self.joint_files[arm_id] = os.path.join(arm_dir, "joints.csv")
+            self.gripper_files[arm_id] = os.path.join(arm_dir, "grippers.csv")
+            
+            # Create CSV files with headers
+            with open(self.pose_files[arm_id], "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "index", "value"])
+                
+            with open(self.joint_files[arm_id], "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "index", "value"])
+                
+            with open(self.gripper_files[arm_id], "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "index", "value"])
+
         os.makedirs(self.video_dir, exist_ok=True)
         
-        # Create CSV files with headers
-        with open(self.pose_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["timestamp", "index", "value"])
-            
-        with open(self.joint_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["timestamp", "index", "value"])
-
     def register_device(self, device_name, device_info):
         """注册设备信息到元数据中"""
         self.metadata["devices"][device_name] = device_info
@@ -175,11 +195,13 @@ class DataCollect:
         """启动消费线程"""
         if not self.running:
             self.running = True
-            # 启动两个独立的消费线程
+            # 启动三个独立的消费线程
             self.video_consumer_thread = threading.Thread(target=self._consume_video, daemon=True)
             self.state_consumer_thread = threading.Thread(target=self._consume_state, daemon=True)
+            self.gripper_consumer_thread = threading.Thread(target=self._consume_gripper, daemon=True)
             self.video_consumer_thread.start()
             self.state_consumer_thread.start()
+            self.gripper_consumer_thread.start()
 
     def stop(self):
         """停止消费线程"""
@@ -188,6 +210,8 @@ class DataCollect:
             self.video_consumer_thread.join()
         if self.state_consumer_thread:
             self.state_consumer_thread.join()
+        if self.gripper_consumer_thread:
+            self.gripper_consumer_thread.join()
         # 结束会话并保存元数据
         self.finish_session()
 
@@ -201,7 +225,8 @@ class DataCollect:
                     # 为每个摄像头创建独立的子目录
                     camera_dir = os.path.join(self.video_dir, f"camera_{camera_id}")
                     os.makedirs(camera_dir, exist_ok=True)
-                    filename = os.path.join(camera_dir, f"frame_{ts:.3f}.jpg")
+                    # 保存为PNG格式以保留原始数据
+                    filename = os.path.join(camera_dir, f"frame_{ts:.3f}.png")
                     cv2.imwrite(filename, frame)
                 self.video_queue.task_done()
             except queue.Empty:
@@ -211,9 +236,9 @@ class DataCollect:
         """消费机械臂状态线程：不断取出状态队列头部数据并存储到本地"""
         while self.running:
             try:
-                ts, state = self.state_queue.get(timeout=0.1)
+                ts, state, arm_id = self.state_queue.get(timeout=0.1)
                 # Check capture state before saving
-                if self.capture_state == 1 and self.pose_file and self.joint_file:
+                if self.capture_state == 1 and arm_id in self.pose_files and arm_id in self.joint_files:
                     # state是一个包含(timestamp, (pose, joints))的元组
                     # pose是位姿数组，joints是关节数组
                     if isinstance(state, tuple) and len(state) >= 2:
@@ -221,18 +246,42 @@ class DataCollect:
                         
                         # 写入位姿数据到poses.csv
                         if isinstance(pose_data, (list, tuple)):
-                            with open(self.pose_file, "a", newline="", encoding="utf-8") as f:
+                            with open(self.pose_files[arm_id], "a", newline="", encoding="utf-8") as f:
                                 writer = csv.writer(f)
                                 for i, value in enumerate(pose_data):
                                     writer.writerow([f"{ts:.3f}", i, value])
                                     
                         # 写入关节数据到joints.csv
                         if isinstance(joint_data, (list, tuple)):
-                            with open(self.joint_file, "a", newline="", encoding="utf-8") as f:
+                            with open(self.joint_files[arm_id], "a", newline="", encoding="utf-8") as f:
                                 writer = csv.writer(f)
                                 for i, value in enumerate(joint_data):
                                     writer.writerow([f"{ts:.3f}", i, value])
                         
                 self.state_queue.task_done()
+            except queue.Empty:
+                pass
+
+    def _consume_gripper(self):
+        """消费夹爪状态线程：不断取出夹爪队列头部数据并存储到本地"""
+        while self.running:
+            try:
+                ts, gripper_state, arm_id = self.gripper_queue.get(timeout=0.1)
+                # Check capture state before saving
+                if self.capture_state == 1 and arm_id in self.gripper_files:
+                    # 写入夹爪数据到grippers.csv
+                    if isinstance(gripper_state, (list, tuple, dict)):
+                        with open(self.gripper_files[arm_id], "a", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f)
+                            if isinstance(gripper_state, dict):
+                                # 如果是字典，遍历键值对
+                                for key, value in gripper_state.items():
+                                    writer.writerow([f"{ts:.3f}", key, value])
+                            else:
+                                # 如果是列表或元组，遍历索引和值
+                                for i, value in enumerate(gripper_state):
+                                    writer.writerow([f"{ts:.3f}", i, value])
+                        
+                self.gripper_queue.task_done()
             except queue.Empty:
                 pass
