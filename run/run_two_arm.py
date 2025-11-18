@@ -31,20 +31,51 @@ if __name__ == '__main__':
             dc.put_video_frame(frame,camera_id=2)
             
         
-        # 创建一个函数来处理机器人状态数据，将其格式化为(pose, joints)元组
-        def handle_robot_state(timestamp=None):
+        # 创建一个函数来处理左臂状态数据
+        def handle_left_arm_state(timestamp=None):
             def inner_func(*args):
-                # args可能包含多个参数，但我们只关心pose和joint数据
                 pose_data = l_arm.get_pose_data()
                 joint_data = l_arm.get_joint_data()
                 if pose_data is not None and joint_data is not None:
-                    # 将pose和joint数据作为元组传递
-                    dc.put_robot_state((pose_data, joint_data), timestamp)
+                    # 将pose和joint数据作为元组传递，指定臂ID为0
+                    dc.put_robot_state((pose_data, joint_data), arm_id=0, timestamp=timestamp)
             return inner_func
         
-        # 注册机器人状态事件处理函数
-        l_arm.on("pose", handle_robot_state())
-        l_arm.on("joint", handle_robot_state())
+        # 创建一个函数来处理右臂状态数据
+        def handle_right_arm_state(timestamp=None):
+            def inner_func(*args):
+                pose_data = r_arm.get_pose_data()
+                joint_data = r_arm.get_joint_data()
+                if pose_data is not None and joint_data is not None:
+                    # 将pose和joint数据作为元组传递，指定臂ID为1
+                    dc.put_robot_state((pose_data, joint_data), arm_id=1, timestamp=timestamp)
+            return inner_func
+        
+        # 处理左臂夹爪数据
+        def handle_left_gripper_state(timestamp=None):
+            def inner_func(*args):
+                gripper_data = l_arm.get_end_effector_data()
+                if gripper_data is not None:
+                    dc.put_gripper_state(gripper_data, arm_id=0, timestamp=timestamp)
+            return inner_func
+        
+        # 处理右臂夹爪数据
+        def handle_right_gripper_state(timestamp=None):
+            def inner_func(*args):
+                gripper_data = r_arm.get_end_effector_data()
+                if gripper_data is not None:
+                    dc.put_gripper_state(gripper_data, arm_id=1, timestamp=timestamp)
+            return inner_func
+        
+        # 注册左臂状态事件处理函数
+        l_arm.on("pose", handle_left_arm_state())
+        l_arm.on("joint", handle_left_arm_state())
+        l_arm.on("end_effector", handle_left_gripper_state())
+        
+        # 注册右臂状态事件处理函数
+        r_arm.on("pose", handle_right_arm_state())
+        r_arm.on("joint", handle_right_arm_state())
+        r_arm.on("end_effector", handle_right_gripper_state())
         
         # 注册回调函数
         teleop.on("leftGripTurnDown",l_arm.start_control)

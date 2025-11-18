@@ -45,7 +45,7 @@ class DataPostProcessor:
             session_id (str): 会话ID
             
         Returns:
-            tuple: (metadata, image_data, pose_data, joint_data)
+            tuple: (metadata, image_data, arm_data)
         """
         session_path = os.path.join(self.temp_dir, session_id)
         
@@ -66,47 +66,70 @@ class DataPostProcessor:
                         image_data[camera_id] = {}
                     
                     for frame_file in os.listdir(camera_path):
-                        if frame_file.startswith("frame_") and frame_file.endswith(".jpg"):
-                            timestamp = float(frame_file[6:-4])  # 去掉"frame_"前缀和".jpg"后缀
+                        if frame_file.startswith("frame_") and (frame_file.endswith(".png") or frame_file.endswith(".jpg")):
+                            # 支持PNG和JPG格式
+                            timestamp = float(frame_file[6:-4])  # 去掉"frame_"前缀和文件扩展名
                             image_data[camera_id][timestamp] = os.path.join(camera_path, frame_file)
                     
-        # 加载位姿数据
-        pose_file = os.path.join(session_path, "poses.csv")
-        pose_data = {}
-        if os.path.exists(pose_file):
-            with open(pose_file, "r", encoding="utf-8") as f:
-                reader = csv.reader(f)
-                next(reader)  # 跳过标题行
-                for row in reader:
-                    if len(row) >= 3:
-                        timestamp = float(row[0])
-                        index = int(row[1])
-                        value = float(row[2])
-                        
-                        if timestamp not in pose_data:
-                            pose_data[timestamp] = {}
-                            
-                        pose_data[timestamp][index] = value
-        
-        # 加载关节数据
-        joint_file = os.path.join(session_path, "joints.csv")
-        joint_data = {}
-        if os.path.exists(joint_file):
-            with open(joint_file, "r", encoding="utf-8") as f:
-                reader = csv.reader(f)
-                next(reader)  # 跳过标题行
-                for row in reader:
-                    if len(row) >= 3:
-                        timestamp = float(row[0])
-                        index = int(row[1])
-                        value = float(row[2])
-                        
-                        if timestamp not in joint_data:
-                            joint_data[timestamp] = {}
-                            
-                        joint_data[timestamp][index] = value
+        # 加载双臂数据
+        arm_data = {}
+        for arm_id in [0, 1]:  # 支持两个臂
+            arm_path = os.path.join(session_path, f"arm_{arm_id}")
+            if os.path.exists(arm_path):
+                arm_data[arm_id] = {"pose": {}, "joint": {}, "gripper": {}}
+                
+                # 加载位姿数据
+                pose_file = os.path.join(arm_path, "poses.csv")
+                if os.path.exists(pose_file):
+                    with open(pose_file, "r", encoding="utf-8") as f:
+                        reader = csv.reader(f)
+                        next(reader)  # 跳过标题行
+                        for row in reader:
+                            if len(row) >= 3:
+                                timestamp = float(row[0])
+                                index = int(row[1])
+                                value = float(row[2])
+                                
+                                if timestamp not in arm_data[arm_id]["pose"]:
+                                    arm_data[arm_id]["pose"][timestamp] = {}
+                                    
+                                arm_data[arm_id]["pose"][timestamp][index] = value
+                
+                # 加载关节数据
+                joint_file = os.path.join(arm_path, "joints.csv")
+                if os.path.exists(joint_file):
+                    with open(joint_file, "r", encoding="utf-8") as f:
+                        reader = csv.reader(f)
+                        next(reader)  # 跳过标题行
+                        for row in reader:
+                            if len(row) >= 3:
+                                timestamp = float(row[0])
+                                index = int(row[1])
+                                value = float(row[2])
+                                
+                                if timestamp not in arm_data[arm_id]["joint"]:
+                                    arm_data[arm_id]["joint"][timestamp] = {}
+                                    
+                                arm_data[arm_id]["joint"][timestamp][index] = value
+                
+                # 加载夹爪数据
+                gripper_file = os.path.join(arm_path, "grippers.csv")
+                if os.path.exists(gripper_file):
+                    with open(gripper_file, "r", encoding="utf-8") as f:
+                        reader = csv.reader(f)
+                        next(reader)  # 跳过标题行
+                        for row in reader:
+                            if len(row) >= 3:
+                                timestamp = float(row[0])
+                                index = row[1]  # 夹爪数据的索引可能是字符串
+                                value = float(row[2])
+                                
+                                if timestamp not in arm_data[arm_id]["gripper"]:
+                                    arm_data[arm_id]["gripper"][timestamp] = {}
+                                    
+                                arm_data[arm_id]["gripper"][timestamp][index] = value
                     
-        return metadata, image_data, pose_data, joint_data
+        return metadata, image_data, arm_data
     
     def interpolate_states(self, image_timestamps, state_timestamps, state_values):
         """
@@ -151,14 +174,14 @@ class DataPostProcessor:
         print(f"Processing session {session_id}...")
         
         # 加载会话数据
-        metadata, image_data, pose_data, joint_data = self.load_session_data(session_id)
+        metadata, image_data, arm_data = self.load_session_data(session_id)
         
         if not image_data:
             print(f"No image data found for session {session_id}")
             return
             
-        if not pose_data and not joint_data:
-            print(f"No pose or joint data found for session {session_id}")
+        if not arm_data:
+            print(f"No arm data found for session {session_id}")
             return
             
         # 排序时间戳
@@ -168,57 +191,92 @@ class DataPostProcessor:
             all_image_timestamps.update(image_data[camera_id].keys())
         sorted_image_timestamps = sorted(list(all_image_timestamps))
         
-        sorted_pose_timestamps = sorted(pose_data.keys()) if pose_data else []
-        sorted_joint_timestamps = sorted(joint_data.keys()) if joint_data else []
-        
-        print(f"Found {len(sorted_image_timestamps)} images from {len(image_data)} cameras, {len(sorted_pose_timestamps)} pose records, and {len(sorted_joint_timestamps)} joint records")
-        
-        # 确定pose和joint的维度
-        pose_dim = 0
-        joint_dim = 0
-        
-        # 通过检查所有时间戳的数据来确定维度
-        if pose_data:
-            for pose_info in pose_data.values():
-                if pose_info:
-                    pose_dim = max(pose_dim, max(pose_info.keys()) + 1)
-                    
-        if joint_data:
-            for joint_info in joint_data.values():
-                if joint_info:
-                    joint_dim = max(joint_dim, max(joint_info.keys()) + 1)
-                
-        print(f"Pose dimension: {pose_dim}, Joint dimension: {joint_dim}")
-        
-        # 构建pose数组
-        pose_data_list = []
-        for timestamp in sorted_pose_timestamps:
-            pose_info = pose_data[timestamp]
+        # 处理每个臂的数据
+        processed_arm_data = {}
+        for arm_id in arm_data:
+            arm = arm_data[arm_id]
+            sorted_pose_timestamps = sorted(arm["pose"].keys()) if arm["pose"] else []
+            sorted_joint_timestamps = sorted(arm["joint"].keys()) if arm["joint"] else []
+            sorted_gripper_timestamps = sorted(arm["gripper"].keys()) if arm["gripper"] else []
+            
+            print(f"Arm {arm_id}: Found {len(sorted_pose_timestamps)} pose records, {len(sorted_joint_timestamps)} joint records, and {len(sorted_gripper_timestamps)} gripper records")
+            
+            # 确定维度
+            pose_dim = 0
+            joint_dim = 0
+            gripper_dim = 0
+            
+            # 通过检查所有时间戳的数据来确定维度
+            if arm["pose"]:
+                for pose_info in arm["pose"].values():
+                    if pose_info:
+                        pose_dim = max(pose_dim, max(pose_info.keys()) + 1)
+                        
+            if arm["joint"]:
+                for joint_info in arm["joint"].values():
+                    if joint_info:
+                        joint_dim = max(joint_dim, max(joint_info.keys()) + 1)
+                        
+            if arm["gripper"]:
+                # 处理夹爪数据维度（夹爪数据可能是字符串索引）
+                gripper_keys = set()
+                for gripper_info in arm["gripper"].values():
+                    gripper_keys.update(gripper_info.keys())
+                gripper_dim = len(gripper_keys)
+                gripper_key_to_index = {key: i for i, key in enumerate(sorted(gripper_keys))}
+            
+            # 构建数据数组
             # 构建pose数组
-            pose_array = [0.0] * pose_dim
-            for i in range(pose_dim):
-                if i in pose_info:
-                    pose_array[i] = pose_info[i]
-            pose_data_list.append(pose_array)
-            
-        # 构建joint数组
-        joint_data_list = []
-        for timestamp in sorted_joint_timestamps:
-            joint_info = joint_data[timestamp]
+            pose_data_list = []
+            for timestamp in sorted_pose_timestamps:
+                pose_info = arm["pose"][timestamp]
+                # 构建pose数组
+                pose_array = [0.0] * pose_dim
+                for i in range(pose_dim):
+                    if i in pose_info:
+                        pose_array[i] = pose_info[i]
+                pose_data_list.append(pose_array)
+                
             # 构建joint数组
-            joint_array = [0.0] * joint_dim
-            for i in range(joint_dim):
-                if i in joint_info:
-                    joint_array[i] = joint_info[i]
-            joint_data_list.append(joint_array)
+            joint_data_list = []
+            for timestamp in sorted_joint_timestamps:
+                joint_info = arm["joint"][timestamp]
+                # 构建joint数组
+                joint_array = [0.0] * joint_dim
+                for i in range(joint_dim):
+                    if i in joint_info:
+                        joint_array[i] = joint_info[i]
+                joint_data_list.append(joint_array)
+                
+            # 构建gripper数组
+            gripper_data_list = []
+            for timestamp in sorted_gripper_timestamps:
+                gripper_info = arm["gripper"][timestamp]
+                # 构建gripper数组
+                gripper_array = [0.0] * gripper_dim
+                for key, value in gripper_info.items():
+                    if key in gripper_key_to_index:
+                        index = gripper_key_to_index[key]
+                        gripper_array[index] = value
+                gripper_data_list.append(gripper_array)
+                
+            # 转换为numpy数组
+            pose_data_array = np.array(pose_data_list) if pose_data_list else np.array([]).reshape(0, pose_dim or 6)
+            joint_data_array = np.array(joint_data_list) if joint_data_list else np.array([]).reshape(0, joint_dim or 6)
+            gripper_data_array = np.array(gripper_data_list) if gripper_data_list else np.array([]).reshape(0, gripper_dim or 1)
             
-        # 转换为numpy数组
-        pose_data_array = np.array(pose_data_list) if pose_data_list else np.array([]).reshape(0, pose_dim or 6)
-        joint_data_array = np.array(joint_data_list) if joint_data_list else np.array([]).reshape(0, joint_dim or 6)
+            # 对状态数据进行插值以匹配图像时间戳
+            interp_poses = self.interpolate_states(sorted_image_timestamps, sorted_pose_timestamps, pose_data_array)
+            interp_joints = self.interpolate_states(sorted_image_timestamps, sorted_joint_timestamps, joint_data_array)
+            interp_grippers = self.interpolate_states(sorted_image_timestamps, sorted_gripper_timestamps, gripper_data_array)
+            
+            processed_arm_data[arm_id] = {
+                "pose": interp_poses,
+                "joint": interp_joints,
+                "gripper": interp_grippers
+            }
         
-        # 对状态数据进行插值以匹配图像时间戳
-        interp_poses = self.interpolate_states(sorted_image_timestamps, sorted_pose_timestamps, pose_data_array)
-        interp_joints = self.interpolate_states(sorted_image_timestamps, sorted_joint_timestamps, joint_data_array)
+        print(f"Processing {len(sorted_image_timestamps)} image timestamps")
         
         # 创建HDF5文件，符合view_hdf5要求的格式
         with h5py.File(output_file, 'w') as hdf5_file:
@@ -271,12 +329,23 @@ class DataPostProcessor:
                 )
             
             # 保存状态数据（观测值）
-            state_group.create_dataset("pose", data=interp_poses, compression='gzip')
-            state_group.create_dataset("joint", data=interp_joints, compression='gzip')
+            # 为每个臂创建子组
+            for arm_id in processed_arm_data:
+                arm_group = state_group.create_group(f"arm_{arm_id}")
+                arm_data = processed_arm_data[arm_id]
+                arm_group.create_dataset("pose", data=arm_data["pose"], compression='gzip')
+                arm_group.create_dataset("joint", data=arm_data["joint"], compression='gzip')
+                arm_group.create_dataset("gripper", data=arm_data["gripper"], compression='gzip')
             
             # 保存动作数据（这里简单地使用与观测相同的数据）
-            action_group.create_dataset("pose", data=interp_poses, compression='gzip')
-            action_group.create_dataset("joint", data=interp_joints, compression='gzip')
+            # 为每个臂创建子组
+            for arm_id in processed_arm_data:
+                arm_group = action_group.create_group(f"arm_{arm_id}")
+                arm_data = processed_arm_data[arm_id]
+                arm_group.create_dataset("pose", data=arm_data["pose"], compression='gzip')
+                arm_group.create_dataset("joint", data=arm_data["joint"], compression='gzip')
+                arm_group.create_dataset("gripper", data=arm_data["gripper"], compression='gzip')
+            
             action_group.create_dataset("timestamps", data=np.array(sorted_image_timestamps), compression='gzip')
             
             # 保存元数据
@@ -290,6 +359,7 @@ class DataPostProcessor:
             info_group.attrs["total_episodes"] = 1
             info_group.attrs["total_frames"] = len(sorted_image_timestamps)
             info_group.attrs["num_cameras"] = len(image_data)
+            info_group.attrs["num_arms"] = len(processed_arm_data)
             info_group.attrs["version"] = "1.0"
             
         print(f"Saved HDF5 file to {output_file}")
