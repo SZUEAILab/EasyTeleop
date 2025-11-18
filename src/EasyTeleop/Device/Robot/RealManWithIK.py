@@ -123,7 +123,7 @@ class RealManWithIK(BaseRobot):
             # 获取手臂状态
             succ, arm_state = self.arm_controller.rm_get_current_arm_state()
             # print(arm_state)
-            if not succ:
+            if not succ and arm_state["pose"] is not None and arm_state["joint"] is not None:
                 self.current_pose_data = arm_state["pose"]
                 self.current_joint_data = arm_state["joint"]
             else:
@@ -231,7 +231,10 @@ class RealManWithIK(BaseRobot):
             print("[Control] Control stopped.")
     def _control_loop(self):
         """控制线程主循环"""
-        while self.control_thread_running:
+        while self.control_thread_running :
+            if self._conn_status != 1:
+                time.sleep(0.1)
+                continue
             control_start = time.time()
             # 处理位姿队列，只取最新的一帧数据
             pose_data = None
@@ -241,6 +244,9 @@ class RealManWithIK(BaseRobot):
             # 只处理最新的位姿数据
             if pose_data is not None:
                 if self.prev_tech_state is None:
+                    if self.get_pose_data() is None or self.get_joint_data() is None:
+                        print("等待机械臂状态数据...")
+                        continue
                     # 初始化状态
                     self.prev_tech_state = pose_data
                     self.arm_first_state = self.get_pose_data()
