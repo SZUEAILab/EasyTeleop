@@ -11,7 +11,7 @@ Revo2灵巧手工具函数模块
 import json
 import sys
 import logging
-from logger import getLogger
+from .logger import getLogger
 
 # logger = getLogger(logging.DEBUG)
 logger = getLogger(logging.INFO)

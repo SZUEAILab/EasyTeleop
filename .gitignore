@@ -27,3 +27,5 @@ datasets/*
 test/*
 
 .vscode/
+
+logs/*

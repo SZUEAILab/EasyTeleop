@@ -3,7 +3,7 @@ import time
 import threading
 import numpy as np
 import asyncio
-from python.revo2 import revo2_utils
+from .bc.revo2 import revo2_utils
 
 class Revo2Direct(BaseHand):
     """直接控制Revo2灵巧手（基于官方SDK）"""
@@ -11,7 +11,7 @@ class Revo2Direct(BaseHand):
     name = "Revo2灵巧手直连控制"
     description = "通过Revo2官方SDK直接控制，支持位置时间模式"
     need_config = {
-        "port_name": {  
+        "port": {  
             "type": "string",
             "description": "串口名称（如/dev/ttyUSB0或COM3）",
             "default": None  
@@ -78,7 +78,7 @@ class Revo2Direct(BaseHand):
         try:
             # 使用SDK的连接函数（自动检测或指定串口）
             future = asyncio.run_coroutine_threadsafe(
-                revo2_utils.open_modbus_revo2(port_name=self.config["port_name"]),
+                revo2_utils.open_modbus_revo2(port_name=self.config["port"]),
                 self.loop
             )
             client, detected_id = future.result(timeout=5)  # 5秒超时

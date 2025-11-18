@@ -4,7 +4,7 @@ import time
 from revo2_utils import *
 
 SLAVE_ID = 0x7e  # 左手
-PORT = "/dev/ttyUSB0"  # 替换为实际的串口名称
+PORT = "com9"  # 替换为实际的串口名称
 BAUDRATE = libstark.Baudrate.Baud460800
 
 async def main():
