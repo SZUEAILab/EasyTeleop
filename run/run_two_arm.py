@@ -15,11 +15,25 @@ if __name__ == '__main__':
         camera1 = RealSenseCamera({"serial":"153122070447","target_fps": 30}) 
         
         devices = [l_arm, r_arm, vrsocket, camera1]
+        
         @camera1.on("frame")
         def show_frame(frame):
             dc.put_video_frame(frame)
         
-        l_arm.on("state", dc.put_robot_state)
+        # 创建一个函数来处理机器人状态数据，将其格式化为(pose, joints)元组
+        def handle_robot_state(timestamp=None):
+            def inner_func(*args):
+                # args可能包含多个参数，但我们只关心pose和joint数据
+                pose_data = l_arm.get_pose_data()
+                joint_data = l_arm.get_joint_data()
+                if pose_data is not None and joint_data is not None:
+                    # 将pose和joint数据作为元组传递
+                    dc.put_robot_state((pose_data, joint_data), timestamp)
+            return inner_func
+        
+        # 注册机器人状态事件处理函数
+        l_arm.on("pose", handle_robot_state())
+        l_arm.on("joint", handle_robot_state())
         
         # 注册回调函数
         teleop.on("leftGripTurnDown",l_arm.start_control)
@@ -49,4 +63,3 @@ if __name__ == '__main__':
             time.sleep(1)
     except Exception as e:
         print(f"初始化失败: {e}")
-        exit(1)

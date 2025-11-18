@@ -5,6 +5,7 @@ import os
 import csv
 import asyncio
 import cv2
+import json
 from typing import Callable
 
 class DataCollect:
@@ -19,7 +20,9 @@ class DataCollect:
         self.save_dir = save_dir
         self.capture_state = 0  # 0: not capturing, 1: capturing
         self.session_timestamp = None
-        self.state_file = None
+        self.metadata = {}
+        self.pose_file = None
+        self.joint_file = None
         self.video_dir = None
         os.makedirs(self.save_dir, exist_ok=True)
         self.video_consumer_thread = None
@@ -104,14 +107,14 @@ class DataCollect:
         """默认错误回调函数，打印错误信息"""
         print(f"设备{self.__class__.__name__}发生错误: {error_msg}")
 
-    def put_video_frame(self, frame, ts=None):
-        """向视频队列添加帧（frame为numpy数组），附带时间戳"""
+    def put_video_frame(self, frame, ts=None, camera_id=0):
+        """向视频队列添加帧（frame为numpy数组），附带时间戳和摄像头ID"""
         if ts is None:
             ts = time.time()
-        self.video_queue.put((ts, frame))
+        self.video_queue.put((ts, frame, camera_id))
 
     def put_robot_state(self, state, ts=None):
-        """向机械臂状态队列添加状态（state为dict或list），附带时间戳"""
+        """向机械臂状态队列添加状态（state为包含pose和joint的元组），附带时间戳"""
         if ts is None:
             ts = time.time()
         self.state_queue.put((ts, state))
@@ -140,14 +143,33 @@ class DataCollect:
         self.session_timestamp = time.strftime("%Y%m%d_%H%M%S")
         session_dir = os.path.join(self.save_dir, self.session_timestamp)
         self.video_dir = os.path.join(session_dir, "frames")
-        self.state_file = os.path.join(session_dir, "states.csv")
+        self.pose_file = os.path.join(session_dir, "poses.csv")
+        self.joint_file = os.path.join(session_dir, "joints.csv")
         
         os.makedirs(self.video_dir, exist_ok=True)
         
-        # Create CSV file with header
-        with open(self.state_file, "w", newline="", encoding="utf-8") as f:
+        # Create CSV files with headers
+        with open(self.pose_file, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["timestamp", "state"])
+            writer.writerow(["timestamp", "index", "value"])
+            
+        with open(self.joint_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["timestamp", "index", "value"])
+
+    def register_device(self, device_name, device_info):
+        """注册设备信息到元数据中"""
+        self.metadata["devices"][device_name] = device_info
+
+    def finish_session(self):
+        """结束当前会话，保存元数据"""
+        if self.session_timestamp:
+            self.metadata["end_time"] = time.time()
+            session_dir = os.path.join(self.save_dir, self.session_timestamp)
+            metadata_file = os.path.join(session_dir, "metadata.json")
+            
+            with open(metadata_file, "w", encoding="utf-8") as f:
+                json.dump(self.metadata, f, indent=2, ensure_ascii=False)
 
     def start(self):
         """启动消费线程"""
@@ -166,15 +188,20 @@ class DataCollect:
             self.video_consumer_thread.join()
         if self.state_consumer_thread:
             self.state_consumer_thread.join()
+        # 结束会话并保存元数据
+        self.finish_session()
 
     def _consume_video(self):
         """消费视频帧线程：不断取出视频队列头部数据并存储到本地"""
         while self.running:
             try:
-                ts, frame = self.video_queue.get(timeout=0.1)
+                ts, frame, camera_id = self.video_queue.get(timeout=0.1)
                 # Check capture state before saving
                 if self.capture_state == 1 and self.video_dir:
-                    filename = os.path.join(self.video_dir, f"frame_{ts:.3f}.jpg")
+                    # 为每个摄像头创建独立的子目录
+                    camera_dir = os.path.join(self.video_dir, f"camera_{camera_id}")
+                    os.makedirs(camera_dir, exist_ok=True)
+                    filename = os.path.join(camera_dir, f"frame_{ts:.3f}.jpg")
                     cv2.imwrite(filename, frame)
                 self.video_queue.task_done()
             except queue.Empty:
@@ -186,10 +213,26 @@ class DataCollect:
             try:
                 ts, state = self.state_queue.get(timeout=0.1)
                 # Check capture state before saving
-                if self.capture_state == 1 and self.state_file:
-                    with open(self.state_file, "a", newline="", encoding="utf-8") as f:
-                        writer = csv.writer(f)
-                        writer.writerow([f"{ts:.3f}", str(state)])
+                if self.capture_state == 1 and self.pose_file and self.joint_file:
+                    # state是一个包含(timestamp, (pose, joints))的元组
+                    # pose是位姿数组，joints是关节数组
+                    if isinstance(state, tuple) and len(state) >= 2:
+                        pose_data, joint_data = state
+                        
+                        # 写入位姿数据到poses.csv
+                        if isinstance(pose_data, (list, tuple)):
+                            with open(self.pose_file, "a", newline="", encoding="utf-8") as f:
+                                writer = csv.writer(f)
+                                for i, value in enumerate(pose_data):
+                                    writer.writerow([f"{ts:.3f}", i, value])
+                                    
+                        # 写入关节数据到joints.csv
+                        if isinstance(joint_data, (list, tuple)):
+                            with open(self.joint_file, "a", newline="", encoding="utf-8") as f:
+                                writer = csv.writer(f)
+                                for i, value in enumerate(joint_data):
+                                    writer.writerow([f"{ts:.3f}", i, value])
+                        
                 self.state_queue.task_done()
             except queue.Empty:
                 pass
