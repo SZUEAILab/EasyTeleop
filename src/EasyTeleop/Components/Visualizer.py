@@ -6,7 +6,12 @@ import json
 from queue import Queue
 import threading
 import matplotlib
-matplotlib.use('TkAgg')  # 使用TkAgg后端
+
+# 尝试使用TkAgg后端，如果失败则使用默认后端
+try:
+    matplotlib.use('TkAgg')  # 使用TkAgg后端
+except ImportError:
+    pass  # 使用默认后端
 
 class Visualizer:
     def __init__(self):

@@ -13,6 +13,16 @@ from unitree_sdk2py.utils.crc import CRC
 
 # 使用标准logging模块
 logger = logging.getLogger(__name__)
+# 如果日志级别未设置，则设置为INFO级别
+if logger.level == logging.NOTSET:
+    logger.setLevel(logging.INFO)
+
+# 如果没有处理器，则添加一个默认的处理器
+if not logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
 
 class MotorState:
     def __init__(self):
@@ -22,6 +32,10 @@ class MotorState:
 class G1_29_LowState:
     def __init__(self):
         self.motor_state = [MotorState() for _ in range(35)]  # G1_29_Num_Motors = 35
+
+class G1_23_LowState:
+    def __init__(self):
+        self.motor_state = [MotorState() for _ in range(23)]  # G1_23_Num_Motors = 23
 
 class DataBuffer:
     def __init__(self):
@@ -160,7 +174,8 @@ class YushuG1Arm23DOF(BaseRobot):
     need_config = {
         "fps": "控制频率，单位Hz",
         "motion_mode": "是否为运动模式",
-        "simulation_mode": "是否为仿真模式"
+        "simulation_mode": "是否为仿真模式",
+        "network_interface": "网络接口名称（可选）"
     }
     
     def __init__(self, config: dict = None):
@@ -202,9 +217,6 @@ class YushuG1Arm23DOF(BaseRobot):
         self.ctrl_lock = threading.Lock()
         self.data_lock = threading.Lock()
         
-        # 数据队列
-        self.pose_queue = deque(maxlen=10)
-        
         # 标志位
         self._speed_gradual_max = False
         self._gradual_start_time = None
@@ -235,8 +247,14 @@ class YushuG1Arm23DOF(BaseRobot):
         try:
             logger.info("正在连接宇树G1机械臂(23自由度版本)...")
             
-            # 初始化ChannelFactory
-            ChannelFactoryInitialize(0)  # TODO: 网络接口可能需要配置
+            # 初始化ChannelFactory，支持自定义网络接口
+            network_interface = self.config.get("network_interface") if self.config else None
+            if network_interface:
+                ChannelFactoryInitialize(0, network_interface)
+                logger.info(f"使用指定网络接口: {network_interface}")
+            else:
+                ChannelFactoryInitialize(0)
+                logger.info("使用默认网络接口")
             
             # 创建发布者和订阅者
             self.lowcmd_publisher = ChannelPublisher(self.kTopicLowCommand_Motion, hg_LowCmd)
@@ -247,6 +265,24 @@ class YushuG1Arm23DOF(BaseRobot):
             
             # 正确初始化消息对象
             self.msg = unitree_hg_msg_dds__LowCmd_()
+            self.msg.mode_pr = 0
+            
+            # 初始化电机控制参数
+            arm_indices = set(member.value for member in G1_23_JointArmIndex)
+            for id in G1_23_JointIndex:
+                self.msg.motor_cmd[id].mode = 1  # 初始化所有电机为锁定模式
+                if id.value in arm_indices:
+                    # 设置手臂关节的PID参数
+                    self.msg.motor_cmd[id].kp = self.kp_low
+                    self.msg.motor_cmd[id].kd = self.kd_low
+                else:
+                    if self._Is_weak_motor(id):
+                        # 设置弱电机的PID参数
+                        self.msg.motor_cmd[id].kp = self.kp_low
+                        self.msg.motor_cmd[id].kd = self.kd_low
+
+            # 启动控制线程
+            self.control_thread_running = True
             
             # 启动订阅线程
             self.subscribe_thread = threading.Thread(target=self._subscribe_motor_state)
@@ -254,8 +290,7 @@ class YushuG1Arm23DOF(BaseRobot):
             self.subscribe_thread.start()
             
             # 启动控制线程
-            self.control_thread_running = True
-            self.publish_thread = threading.Thread(target=self._ctrl_motor_state)
+            self.publish_thread = threading.Thread(target=self._control_loop)
             self.publish_thread.daemon = True
             self.publish_thread.start()
             
@@ -289,18 +324,71 @@ class YushuG1Arm23DOF(BaseRobot):
             return False
     
     def _main(self):
-        """主循环逻辑，由BaseDevice管理"""
+        """主循环逻辑，由BaseDevice管理，用于轮询获取状态"""
+        # 获取当前关节状态并更新内部状态
+        current_joint_state = self.get_current_joint_state()
+        if current_joint_state:
+            self.current_joint_data = current_joint_state
+            
+            # 触发关节状态事件
+            self.emit("joint", current_joint_state)
+        
+        # 处理来自上层的控制指令
         if self.pose_queue:
-            # 获取最新姿态数据（保留最新）
             with self.data_lock:
-                pose_data = self.pose_queue[-1]  # 只取最新一帧
-                self.pose_queue.clear()  # 清空队列，只保留最新
-            
-            # 解析目标关节角度 (23自由度版本只需要8个关节值)
-            target_q = np.array(pose_data[:8])
-            
-            # 发送到机械臂控制器
-            self.ctrl_dual_arm(target_q, np.zeros(8))  # 暂时不发送力矩
+                # 获取最新的姿态数据
+                pose_data = None
+                while self.pose_queue:
+                    pose_data = self.pose_queue.popleft()
+                    
+                if pose_data is not None:
+                    # 解析目标关节角度 (23自由度版本只需要8个关节值)
+                    target_q = np.array(pose_data[:8])
+                    
+                    # 更新控制目标值（由_control_loop负责发送）
+                    self.ctrl_dual_arm(target_q, np.zeros(8))
+                    
+                    # 触发pose事件
+                    self.emit("pose", pose_data)
+    
+    def _control_loop(self):
+        """控制循环，专门用于发送控制指令给机械臂"""
+        if self.config["motion_mode"]:
+            # 23自由度版本没有未使用的关节，所以这里留空或者根据需要调整
+            pass
+
+        while self.control_thread_running:
+            # 确保消息对象已初始化
+            if self.msg is None:
+                time.sleep(0.002)
+                continue
+                
+            start_time = time.time()
+
+            with self.ctrl_lock:
+                arm_q_target     = self.q_target
+                arm_tauff_target = self.tauff_target
+
+            # 限制速度
+            cliped_arm_q_target = self.clip_arm_q_target(arm_q_target, velocity_limit = self.arm_velocity_limit)
+
+            for idx, id in enumerate(G1_23_JointArmIndex):
+                self.msg.motor_cmd[id].q = cliped_arm_q_target[idx]
+                self.msg.motor_cmd[id].dq = 0
+                self.msg.motor_cmd[id].tau = arm_tauff_target[idx]
+                self.msg.motor_cmd[id].mode = 10  # 设置为控制模式
+
+            self.msg.crc = self.crc.Crc(self.msg)
+            self.lowcmd_publisher.Write(self.msg)
+
+            if self._speed_gradual_max is True:
+                t_elapsed = start_time - self._gradual_start_time
+                self.arm_velocity_limit = 20.0 + (10.0 * min(1.0, t_elapsed / 5.0))
+
+            current_time = time.time()
+            all_t_elapsed = current_time - start_time
+            sleep_time = max(0, (self.control_dt - all_t_elapsed))
+            time.sleep(sleep_time)
     
     def start_control(self) -> None:
         """开始控制机器人"""
@@ -346,53 +434,20 @@ class YushuG1Arm23DOF(BaseRobot):
         return motor_index.value in weak_motors
 
     def _subscribe_motor_state(self):
+        logger.info("开始订阅电机状态数据")
         while self.control_thread_running:
             msg = self.lowstate_subscriber.Read()
             if msg is not None:
+                logger.debug("接收到电机状态数据")
                 lowstate = G1_23_LowState()
                 for id in range(self.G1_23_Num_Motors):
                     lowstate.motor_state[id].q  = msg.motor_state[id].q
                     lowstate.motor_state[id].dq = msg.motor_state[id].dq
                 self.lowstate_buffer.SetData(lowstate)
+            else:
+                logger.debug("未接收到电机状态数据")
             time.sleep(0.002)
     
-    def _ctrl_motor_state(self):
-        if self.config["motion_mode"]:
-            # 23自由度版本没有未使用的关节，所以这里留空或者根据需要调整
-            pass
-
-        while self.control_thread_running:
-            # 确保消息对象已初始化
-            if self.msg is None:
-                time.sleep(0.002)
-                continue
-                
-            start_time = time.time()
-
-            with self.ctrl_lock:
-                arm_q_target     = self.q_target
-                arm_tauff_target = self.tauff_target
-
-            # 限制速度
-            cliped_arm_q_target = self.clip_arm_q_target(arm_q_target, velocity_limit = self.arm_velocity_limit)
-
-            for idx, id in enumerate(G1_23_JointArmIndex):
-                self.msg.motor_cmd[id].q = cliped_arm_q_target[idx]
-                self.msg.motor_cmd[id].dq = 0
-                self.msg.motor_cmd[id].tau = arm_tauff_target[idx]      
-
-            self.msg.crc = self.crc.Crc(self.msg)
-            self.lowcmd_publisher.Write(self.msg)
-
-            if self._speed_gradual_max is True:
-                t_elapsed = start_time - self._gradual_start_time
-                self.arm_velocity_limit = 20.0 + (10.0 * min(1.0, t_elapsed / 5.0))
-
-            current_time = time.time()
-            all_t_elapsed = current_time - start_time
-            sleep_time = max(0, (self.control_dt - all_t_elapsed))
-            time.sleep(sleep_time)
-
     def clip_arm_q_target(self, target_q, velocity_limit):
         current_q = self.get_current_dual_arm_q()
         # 检查current_q是否有效
@@ -411,6 +466,7 @@ class YushuG1Arm23DOF(BaseRobot):
 
     def get_current_joint_state(self) -> list:
         """获取当前关节状态"""
+        logger.debug(f"获取当前关节状态，lowstate_buffer是否有数据: {self.lowstate_buffer.GetData() is not None}")
         if self.lowstate_buffer and self.lowstate_buffer.GetData():
             return self.get_current_dual_arm_q().tolist()
         return []
@@ -418,3 +474,37 @@ class YushuG1Arm23DOF(BaseRobot):
     def is_connected(self) -> bool:
         """检查设备是否已连接"""
         return self.get_conn_status() == 1
+    
+    def stop(self) -> bool:
+        """停止设备"""
+        logger.info("正在断开宇树G1机械臂连接...")
+        
+        # 停止控制线程
+        self.control_thread_running = False
+        
+        # 等待线程结束
+        if self.subscribe_thread and self.subscribe_thread.is_alive():
+            self.subscribe_thread.join(timeout=1)
+            
+        if self.publish_thread and self.publish_thread.is_alive():
+            self.publish_thread.join(timeout=1)
+        
+        # 发送空命令确保电机停止
+        if self.msg is not None:
+            # 将所有电机设置为锁定模式
+            for id in G1_23_JointIndex:
+                self.msg.motor_cmd[id].mode = 1
+            
+            self.msg.crc = self.crc.Crc(self.msg)
+            self.lowcmd_publisher.Write(self.msg)
+            time.sleep(0.1)  # 等待命令发送
+        
+        # 关闭发布者和订阅者
+        if self.lowcmd_publisher:
+            self.lowcmd_publisher.Close()
+            
+        if self.lowstate_subscriber:
+            self.lowstate_subscriber.Close()
+            
+        logger.info("宇树G1机械臂已断开连接")
+        return True

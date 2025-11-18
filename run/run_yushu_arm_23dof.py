@@ -12,7 +12,6 @@ import numpy as np
 
 
 from EasyTeleop.Device.Robot.yushu import YushuG1Arm23DOF
-from EasyTeleop.Components.TeleopMiddleware import TeleopMiddleware
 
 def main():
     """主函数"""
@@ -23,7 +22,8 @@ def main():
     robot_config = {
         "fps": 50,
         "motion_mode": True,
-        "simulation_mode": False
+        "simulation_mode": False,
+        "network_interface": "eth1"
     }
     
     robot = YushuG1Arm23DOF(config=robot_config)
@@ -71,13 +71,18 @@ def main():
         while True:
             # 获取当前关节状态
             current_state = robot.get_current_joint_state()
-            print(f"当前关节状态: {current_state}")
+            if current_state:
+                print(f"当前关节状态: {current_state}")
+            else:
+                print("当前未接收到关节状态数据")
             time.sleep(1)
             
     except KeyboardInterrupt:
         print("\n接收到中断信号，正在停止设备...")
     except Exception as e:
         print(f"运行过程中发生错误: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         # 停止设备
         robot.stop()
