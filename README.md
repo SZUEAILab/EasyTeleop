@@ -133,7 +133,7 @@ uv build --wheel
 1. 确保采集好的会话位于 `datasets/temp`（或者使用 `--temp_dir` 指定其他路径）。
 2. 执行后处理脚本：
    ```bash
-   # 处理单个会话
+   # 只处理指定会话
    uv run run/run_postprocess.py --session demo_001
 
    # 批量处理所有会话并指定输出目录
@@ -141,10 +141,20 @@ uv build --wheel
    ```
 3. 每个会话会生成一个同名的 `.hdf5` 文件（默认输出到 `datasets/hdf5`）。
 
-脚本支持以下参数：
+脚本支持以下常用参数：
 - `--temp_dir`：原始数据所在目录，默认为 `datasets/temp`
 - `--output_dir`：HDF5 输出目录，默认为 `datasets/hdf5`
 - `--session`：只处理指定的会话 ID；不传则处理全部
+- `--latest`：只处理最近修改的一个会话，与 `--session` 互斥
+- `--list`：仅列出 `temp_dir` 中的会话并退出
+
+运行过程中会完成：
+- 读取 `frames/camera_0` 的时间戳并将其作为所有模态的主时间轴；
+- 对双臂的 `pose/joint/end_effector` CSV 数据自动推断维度并做线性插值；
+- 将缺失帧替换为 224×224 的黑色占位图，确保 HDF5 结构稳定；
+- 写入 `metadata`/`info` 分组并统计帧数、摄像头数等信息，便于下游检索。
+
+可以使用 `uv run run/view_hdf5.py --path datasets/hdf5/<session>.hdf5` 快速检查后处理结果和插值情况。更多流程细节、输入规范与排查技巧详见 [PostProcess 数据后处理指南](docs/postprocess.md)。
 
 ### 启动服务
 
