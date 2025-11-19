@@ -76,7 +76,7 @@ class DataPostProcessor:
         for arm_id in [0, 1]:  # 支持两个臂
             arm_path = os.path.join(session_path, f"arm_{arm_id}")
             if os.path.exists(arm_path):
-                arm_data[arm_id] = {"pose": {}, "joint": {}, "gripper": {}}
+                arm_data[arm_id] = {"pose": {}, "joint": {}, "end_effector": {}}
                 
                 # 加载位姿数据
                 pose_file = os.path.join(arm_path, "poses.csv")
@@ -112,22 +112,22 @@ class DataPostProcessor:
                                     
                                 arm_data[arm_id]["joint"][timestamp][index] = value
                 
-                # 加载夹爪数据
-                gripper_file = os.path.join(arm_path, "grippers.csv")
-                if os.path.exists(gripper_file):
-                    with open(gripper_file, "r", encoding="utf-8") as f:
+                # 加载末端执行器数据
+                end_effector_file = os.path.join(arm_path, "end_effector.csv")
+                if os.path.exists(end_effector_file):
+                    with open(end_effector_file, "r", encoding="utf-8") as f:
                         reader = csv.reader(f)
                         next(reader)  # 跳过标题行
                         for row in reader:
                             if len(row) >= 3:
                                 timestamp = float(row[0])
-                                index = row[1]  # 夹爪数据的索引可能是字符串
+                                index = row[1]  # 末端执行器数据的索引可能是字符串
                                 value = float(row[2])
                                 
-                                if timestamp not in arm_data[arm_id]["gripper"]:
-                                    arm_data[arm_id]["gripper"][timestamp] = {}
+                                if timestamp not in arm_data[arm_id]["end_effector"]:
+                                    arm_data[arm_id]["end_effector"][timestamp] = {}
                                     
-                                arm_data[arm_id]["gripper"][timestamp][index] = value
+                                arm_data[arm_id]["end_effector"][timestamp][index] = value
                     
         return metadata, image_data, arm_data
     
@@ -197,14 +197,14 @@ class DataPostProcessor:
             arm = arm_data[arm_id]
             sorted_pose_timestamps = sorted(arm["pose"].keys()) if arm["pose"] else []
             sorted_joint_timestamps = sorted(arm["joint"].keys()) if arm["joint"] else []
-            sorted_gripper_timestamps = sorted(arm["gripper"].keys()) if arm["gripper"] else []
+            sorted_end_effector_timestamps = sorted(arm["end_effector"].keys()) if arm["end_effector"] else []
             
-            print(f"Arm {arm_id}: Found {len(sorted_pose_timestamps)} pose records, {len(sorted_joint_timestamps)} joint records, and {len(sorted_gripper_timestamps)} gripper records")
+            print(f"Arm {arm_id}: Found {len(sorted_pose_timestamps)} pose records, {len(sorted_joint_timestamps)} joint records, and {len(sorted_end_effector_timestamps)} end_effector records")
             
             # 确定维度
             pose_dim = 0
             joint_dim = 0
-            gripper_dim = 0
+            end_effector_dim = 0
             
             # 通过检查所有时间戳的数据来确定维度
             if arm["pose"]:
@@ -217,13 +217,13 @@ class DataPostProcessor:
                     if joint_info:
                         joint_dim = max(joint_dim, max(joint_info.keys()) + 1)
                         
-            if arm["gripper"]:
-                # 处理夹爪数据维度（夹爪数据可能是字符串索引）
-                gripper_keys = set()
-                for gripper_info in arm["gripper"].values():
-                    gripper_keys.update(gripper_info.keys())
-                gripper_dim = len(gripper_keys)
-                gripper_key_to_index = {key: i for i, key in enumerate(sorted(gripper_keys))}
+            if arm["end_effector"]:
+                # 处理末端执行器数据维度（末端执行器数据可能是字符串索引）
+                end_effector_keys = set()
+                for end_effector_info in arm["end_effector"].values():
+                    end_effector_keys.update(end_effector_info.keys())
+                end_effector_dim = len(end_effector_keys)
+                end_effector_key_to_index = {key: i for i, key in enumerate(sorted(end_effector_keys))}
             
             # 构建数据数组
             # 构建pose数组
@@ -248,52 +248,50 @@ class DataPostProcessor:
                         joint_array[i] = joint_info[i]
                 joint_data_list.append(joint_array)
                 
-            # 构建gripper数组
-            gripper_data_list = []
-            for timestamp in sorted_gripper_timestamps:
-                gripper_info = arm["gripper"][timestamp]
-                # 构建gripper数组
-                gripper_array = [0.0] * gripper_dim
-                for key, value in gripper_info.items():
-                    if key in gripper_key_to_index:
-                        index = gripper_key_to_index[key]
-                        gripper_array[index] = value
-                gripper_data_list.append(gripper_array)
+            # 构建end_effector数组
+            end_effector_data_list = []
+            for timestamp in sorted_end_effector_timestamps:
+                end_effector_info = arm["end_effector"][timestamp]
+                # 构建end_effector数组
+                end_effector_array = [0.0] * end_effector_dim
+                for key, value in end_effector_info.items():
+                    if key in end_effector_key_to_index:
+                        index = end_effector_key_to_index[key]
+                        end_effector_array[index] = value
+                end_effector_data_list.append(end_effector_array)
                 
             # 转换为numpy数组
             pose_data_array = np.array(pose_data_list) if pose_data_list else np.array([]).reshape(0, pose_dim or 6)
             joint_data_array = np.array(joint_data_list) if joint_data_list else np.array([]).reshape(0, joint_dim or 6)
-            gripper_data_array = np.array(gripper_data_list) if gripper_data_list else np.array([]).reshape(0, gripper_dim or 1)
+            end_effector_data_array = np.array(end_effector_data_list) if end_effector_data_list else np.array([]).reshape(0, end_effector_dim or 1)
             
             # 对状态数据进行插值以匹配图像时间戳
             interp_poses = self.interpolate_states(sorted_image_timestamps, sorted_pose_timestamps, pose_data_array)
             interp_joints = self.interpolate_states(sorted_image_timestamps, sorted_joint_timestamps, joint_data_array)
-            interp_grippers = self.interpolate_states(sorted_image_timestamps, sorted_gripper_timestamps, gripper_data_array)
+            interp_end_effectors = self.interpolate_states(sorted_image_timestamps, sorted_end_effector_timestamps, end_effector_data_array)
             
             processed_arm_data[arm_id] = {
                 "pose": interp_poses,
                 "joint": interp_joints,
-                "gripper": interp_grippers
+                "end_effector": interp_end_effectors
             }
-        
-        print(f"Processing {len(sorted_image_timestamps)} image timestamps")
         
         # 创建HDF5文件，符合view_hdf5要求的格式
         with h5py.File(output_file, 'w') as hdf5_file:
             # 创建组
-            episode_group = hdf5_file.create_group("episodes/episode_0")
-            obs_group = episode_group.create_group("observations")
+            # episode_group = hdf5_file.create_group("episodes/episode_0")
+            obs_group = hdf5_file.create_group("observations")
             image_group = obs_group.create_group("images")  # 符合view_hdf5要求的结构
             state_group = obs_group.create_group("state")
-            action_group = episode_group.create_group("actions")
+            action_group = hdf5_file.create_group("actions")
             metadata_group = hdf5_file.create_group("metadata")
             info_group = hdf5_file.create_group("info")
             
             # 保存图像数据，符合view_hdf5要求的格式
             # 为每个摄像头创建数据集
             for camera_id in sorted(image_data.keys()):
-                # 使用更友好的摄像头名称
-                camera_name = f"cam_{camera_id}" if camera_id != 0 else "cam_wrist"
+                # 使用更友好的摄像头名称，符合view_hdf5期望的命名方式
+                camera_name = f"cam_{camera_id}" 
                 
                 # 收集该摄像头的所有图像数据
                 image_list = []
@@ -301,32 +299,74 @@ class DataPostProcessor:
                     if timestamp in image_data[camera_id]:
                         image_path = image_data[camera_id][timestamp]
                         try:
-                            # 读取图像并转换为JPEG格式的字节数据
-                            image = Image.open(image_path)
-                            buffer = io.BytesIO()
-                            image.save(buffer, format='JPEG')
-                            image_bytes = buffer.getvalue()
-                            image_list.append(np.void(image_bytes))
+                            # 直接读取图像字节数据，不转换为JPEG格式
+                            with open(image_path, 'rb') as f:
+                                image_bytes = f.read()
+                            print(len(image_bytes))
+                            # 确保数据是bytes类型并且不为空
+                            if isinstance(image_bytes, bytes) and len(image_bytes) > 0:
+                                image_list.append(image_bytes)
+                            else:
+                                # 添加一个空图像作为占位符
+                                image_list.append(b'')
                         except Exception as e:
                             print(f"Error loading image {image_path}: {e}")
                             # 添加一个空图像作为占位符
-                            buffer = io.BytesIO()
-                            placeholder = Image.new('RGB', (224, 224), color='black')
-                            placeholder.save(buffer, format='JPEG')
-                            image_list.append(np.void(buffer.getvalue()))
+                            image_list.append(b'')
                     else:
                         # 添加一个空图像作为占位符
-                        buffer = io.BytesIO()
-                        placeholder = Image.new('RGB', (224, 224), color='black')
-                        placeholder.save(buffer, format='JPEG')
-                        image_list.append(np.void(buffer.getvalue()))
+                        image_list.append(b'')
                 
-                # 创建数据集
-                image_dataset = image_group.create_dataset(
-                    camera_name,
-                    data=np.array(image_list, dtype=h5py.special_dtype(vlen=bytes)),
-                    compression='gzip'
-                )
+                try:
+                    # 确保数据集中没有重复名称
+                    if camera_name in image_group:
+                        del image_group[camera_name]
+                    
+                    # 创建数据集，使用h5py.string_dtype()而不是JPEG格式
+                    image_dataset = image_group.create_dataset(
+                        camera_name,
+                        data=np.array(image_list, dtype=h5py.string_dtype()),
+                        compression='gzip'
+                    )
+                    print(f"Successfully created dataset for camera {camera_name}")
+                except Exception as e:
+                    print(f"Error creating dataset for camera {camera_name}: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # 创建一个空的数据集作为后备
+                    try:
+                        # 确保数据集中没有重复名称
+                        if camera_name in image_group:
+                            del image_group[camera_name]
+                            
+                        empty_images = [b'' for _ in range(len(sorted_image_timestamps))]
+                        image_dataset = image_group.create_dataset(
+                            camera_name,
+                            data=np.array(empty_images, dtype=h5py.special_dtype(vlen=bytes)),
+                            compression='gzip'
+                        )
+                        print(f"Created fallback empty dataset for camera {camera_name}")
+                    except Exception as e2:
+                        print(f"Second attempt failed for camera {camera_name}: {e2}")
+                        import traceback
+                        traceback.print_exc()
+                        try:
+                            # 创建最小化的空数据集
+                            if camera_name in image_group:
+                                del image_group[camera_name]
+                                
+                            image_dataset = image_group.create_dataset(
+                                camera_name,
+                                shape=(len(sorted_image_timestamps),),
+                                dtype=h5py.special_dtype(vlen=bytes),
+                                compression='gzip'
+                            )
+                            print(f"Created minimal fallback dataset for camera {camera_name}")
+                        except Exception as e3:
+                            print(f"Third attempt failed for camera {camera_name}: {e3}")
+                            # 最后的备选方案
+                            if camera_name in image_group:
+                                del image_group[camera_name]
             
             # 保存状态数据（观测值）
             # 为每个臂创建子组
@@ -335,7 +375,7 @@ class DataPostProcessor:
                 arm_data = processed_arm_data[arm_id]
                 arm_group.create_dataset("pose", data=arm_data["pose"], compression='gzip')
                 arm_group.create_dataset("joint", data=arm_data["joint"], compression='gzip')
-                arm_group.create_dataset("gripper", data=arm_data["gripper"], compression='gzip')
+                arm_group.create_dataset("end_effector", data=arm_data["end_effector"], compression='gzip')
             
             # 保存动作数据（这里简单地使用与观测相同的数据）
             # 为每个臂创建子组
@@ -344,23 +384,38 @@ class DataPostProcessor:
                 arm_data = processed_arm_data[arm_id]
                 arm_group.create_dataset("pose", data=arm_data["pose"], compression='gzip')
                 arm_group.create_dataset("joint", data=arm_data["joint"], compression='gzip')
-                arm_group.create_dataset("gripper", data=arm_data["gripper"], compression='gzip')
+                arm_group.create_dataset("end_effector", data=arm_data["end_effector"], compression='gzip')
             
             action_group.create_dataset("timestamps", data=np.array(sorted_image_timestamps), compression='gzip')
             
             # 保存元数据
+            def safe_set_attr(group, key, value):
+                """
+                安全地设置h5py组的属性，处理各种数据类型
+                """
+                try:
+                    if isinstance(value, (dict, list, tuple)):
+                        group.attrs[key] = json.dumps(value)
+                    elif isinstance(value, (int, float, str, bool)):
+                        group.attrs[key] = value
+                    elif value is None:
+                        group.attrs[key] = "null"
+                    else:
+                        group.attrs[key] = str(value)
+                except Exception as e:
+                    print(f"Warning: Could not save attribute '{key}': {e}")
+                    group.attrs[key] = "Conversion failed"
+            
+            # 使用安全的方法设置metadata_group属性
             for key, value in metadata.items():
-                if isinstance(value, (dict, list)):
-                    metadata_group.attrs[key] = json.dumps(value)
-                else:
-                    metadata_group.attrs[key] = value
-                    
-            # 保存信息
-            info_group.attrs["total_episodes"] = 1
-            info_group.attrs["total_frames"] = len(sorted_image_timestamps)
-            info_group.attrs["num_cameras"] = len(image_data)
-            info_group.attrs["num_arms"] = len(processed_arm_data)
-            info_group.attrs["version"] = "1.0"
+                safe_set_attr(metadata_group, key, value)
+            
+            # 使用安全的方法设置info_group属性
+            safe_set_attr(info_group, "total_episodes", 1)
+            safe_set_attr(info_group, "total_frames", len(sorted_image_timestamps))
+            safe_set_attr(info_group, "num_cameras", len(image_data))
+            safe_set_attr(info_group, "num_arms", len(processed_arm_data))
+            safe_set_attr(info_group, "version", "1.0")
             
         print(f"Saved HDF5 file to {output_file}")
     

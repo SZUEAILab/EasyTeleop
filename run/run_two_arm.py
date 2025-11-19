@@ -31,51 +31,45 @@ if __name__ == '__main__':
             dc.put_video_frame(frame,camera_id=2)
             
         
-        # 创建一个函数来处理左臂状态数据
-        def handle_left_arm_state(timestamp=None):
-            def inner_func(*args):
-                pose_data = l_arm.get_pose_data()
-                joint_data = l_arm.get_joint_data()
-                if pose_data is not None and joint_data is not None:
-                    # 将pose和joint数据作为元组传递，指定臂ID为0
-                    dc.put_robot_state((pose_data, joint_data), arm_id=0, timestamp=timestamp)
-            return inner_func
+        # 创建一个函数来处理左臂位姿数据
+        @l_arm.on("pose")
+        def handle_left_arm_pose(pose_data):
+            if pose_data is not None:
+                # 将pose数据传递，指定臂ID为0
+                dc.put_robot_pose(pose_data, arm_id=0)
         
-        # 创建一个函数来处理右臂状态数据
-        def handle_right_arm_state(timestamp=None):
-            def inner_func(*args):
-                pose_data = r_arm.get_pose_data()
-                joint_data = r_arm.get_joint_data()
-                if pose_data is not None and joint_data is not None:
-                    # 将pose和joint数据作为元组传递，指定臂ID为1
-                    dc.put_robot_state((pose_data, joint_data), arm_id=1, timestamp=timestamp)
-            return inner_func
+        # 创建一个函数来处理左臂关节数据
+        @l_arm.on("joint")
+        def handle_left_arm_joint(joint_data):
+            if joint_data is not None:
+                # 将joint数据传递，指定臂ID为0
+                dc.put_robot_joint(joint_data, arm_id=0)
+        
+        # 创建一个函数来处理右臂位姿数据
+        @r_arm.on("pose")
+        def handle_right_arm_pose(pose_data):
+            if pose_data is not None:
+                # 将pose数据传递，指定臂ID为1
+                dc.put_robot_pose(pose_data, arm_id=1)
+        
+        # 创建一个函数来处理右臂关节数据
+        @r_arm.on("joint")
+        def handle_right_arm_joint(joint_data):
+            if joint_data is not None:
+                # 将joint数据传递，指定臂ID为1
+                dc.put_robot_joint(joint_data, arm_id=1)
         
         # 处理左臂夹爪数据
-        def handle_left_gripper_state(timestamp=None):
-            def inner_func(*args):
-                gripper_data = l_arm.get_end_effector_data()
-                if gripper_data is not None:
-                    dc.put_gripper_state(gripper_data, arm_id=0, timestamp=timestamp)
-            return inner_func
+        @l_arm.on("end_effector")
+        def handle_left_end_effector_state(end_effector):
+            if end_effector is not None:
+                dc.put_end_effector_state(end_effector, arm_id=0)
         
         # 处理右臂夹爪数据
-        def handle_right_gripper_state(timestamp=None):
-            def inner_func(*args):
-                gripper_data = r_arm.get_end_effector_data()
-                if gripper_data is not None:
-                    dc.put_gripper_state(gripper_data, arm_id=1, timestamp=timestamp)
-            return inner_func
-        
-        # 注册左臂状态事件处理函数
-        l_arm.on("pose", handle_left_arm_state())
-        l_arm.on("joint", handle_left_arm_state())
-        l_arm.on("end_effector", handle_left_gripper_state())
-        
-        # 注册右臂状态事件处理函数
-        r_arm.on("pose", handle_right_arm_state())
-        r_arm.on("joint", handle_right_arm_state())
-        r_arm.on("end_effector", handle_right_gripper_state())
+        @r_arm.on("end_effector")
+        def handle_right_end_effector_state(end_effector):
+            if end_effector is not None:
+                dc.put_end_effector_state(end_effector, arm_id=1)
         
         # 注册回调函数
         teleop.on("leftGripTurnDown",l_arm.start_control)
@@ -89,12 +83,18 @@ if __name__ == '__main__':
         teleop.on("rightTrigger",r_arm.add_end_effector_data)
         
         teleop.on("buttonATurnDown",dc.toggle_capture_state)
+
+        @dc.on("status_change")
+        def status_change(status):
+            print(f"数据采集状态改变: {status}")    
         
         #注册回调函数
         vrsocket.on("message",teleop.handle_socket_data)
         
         dc.start()
-        # camera1.start()
+        camera1.start()
+        camera2.start()
+        camera3.start()
         l_arm.start()
         r_arm.start()
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响

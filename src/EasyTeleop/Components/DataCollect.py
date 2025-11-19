@@ -15,8 +15,9 @@ class DataCollect:
         }
 
         self.video_queue = queue.Queue()
-        self.state_queue = queue.Queue()
-        self.gripper_queue = queue.Queue()
+        self.pose_queue = queue.Queue()
+        self.joint_queue = queue.Queue()
+        self.end_effector_queue = queue.Queue()
         self.running = False
         self.save_dir = save_dir
         self.capture_state = 0  # 0: not capturing, 1: capturing
@@ -24,12 +25,13 @@ class DataCollect:
         self.metadata = {}
         self.pose_files = {}  # 为每个臂创建独立的文件
         self.joint_files = {}
-        self.gripper_files = {}
+        self.end_effector_files = {}
         self.video_dir = None
         os.makedirs(self.save_dir, exist_ok=True)
         self.video_consumer_thread = None
-        self.state_consumer_thread = None
-        self.gripper_consumer_thread = None
+        self.pose_consumer_thread = None
+        self.joint_consumer_thread = None
+        self.end_effector_consumer_thread = None
 
     def on(self, event_name: str, callback: Callable = None) -> Callable:
         """
@@ -116,17 +118,23 @@ class DataCollect:
             ts = time.time()
         self.video_queue.put((ts, frame, camera_id))
 
-    def put_robot_state(self, state, arm_id=0, ts=None):
-        """向机械臂状态队列添加状态（state为包含pose和joint的元组），附带时间戳和臂ID"""
+    def put_robot_pose(self, pose_data, arm_id=0, ts=None):
+        """向机械臂位姿队列添加数据，附带时间戳和臂ID"""
         if ts is None:
             ts = time.time()
-        self.state_queue.put((ts, state, arm_id))
+        self.pose_queue.put((ts, pose_data, arm_id))
+        
+    def put_robot_joint(self, joint_data, arm_id=0, ts=None):
+        """向机械臂关节队列添加数据，附带时间戳和臂ID"""
+        if ts is None:
+            ts = time.time()
+        self.joint_queue.put((ts, joint_data, arm_id))
 
-    def put_gripper_state(self, gripper_state, arm_id=0, ts=None):
+    def put_end_effector_state(self, end_effector_state, arm_id=0, ts=None):
         """向夹爪状态队列添加状态，附带时间戳和臂ID"""
         if ts is None:
             ts = time.time()
-        self.gripper_queue.put((ts, gripper_state, arm_id))
+        self.end_effector_queue.put((ts, end_effector_state, arm_id))
 
     def set_capture_state(self, state) -> bool:
         """设置采集状态"""
@@ -144,6 +152,8 @@ class DataCollect:
             self._start_new_session()
             self.capture_state = 1
         else:
+            # 结束会话并保存元数据
+            self.finish_session()
             self.capture_state = 0
         self.emit("status_change", self.capture_state)
 
@@ -160,7 +170,7 @@ class DataCollect:
             
             self.pose_files[arm_id] = os.path.join(arm_dir, "poses.csv")
             self.joint_files[arm_id] = os.path.join(arm_dir, "joints.csv")
-            self.gripper_files[arm_id] = os.path.join(arm_dir, "grippers.csv")
+            self.end_effector_files[arm_id] = os.path.join(arm_dir, "end_effector.csv")
             
             # Create CSV files with headers
             with open(self.pose_files[arm_id], "w", newline="", encoding="utf-8") as f:
@@ -171,7 +181,7 @@ class DataCollect:
                 writer = csv.writer(f)
                 writer.writerow(["timestamp", "index", "value"])
                 
-            with open(self.gripper_files[arm_id], "w", newline="", encoding="utf-8") as f:
+            with open(self.end_effector_files[arm_id], "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
                 writer.writerow(["timestamp", "index", "value"])
 
@@ -195,25 +205,28 @@ class DataCollect:
         """启动消费线程"""
         if not self.running:
             self.running = True
-            # 启动三个独立的消费线程
+            # 启动四个独立的消费线程
             self.video_consumer_thread = threading.Thread(target=self._consume_video, daemon=True)
-            self.state_consumer_thread = threading.Thread(target=self._consume_state, daemon=True)
-            self.gripper_consumer_thread = threading.Thread(target=self._consume_gripper, daemon=True)
+            self.pose_consumer_thread = threading.Thread(target=self._consume_pose, daemon=True)
+            self.joint_consumer_thread = threading.Thread(target=self._consume_joint, daemon=True)
+            self.end_effector_consumer_thread = threading.Thread(target=self._consume_end_effector, daemon=True)
             self.video_consumer_thread.start()
-            self.state_consumer_thread.start()
-            self.gripper_consumer_thread.start()
+            self.pose_consumer_thread.start()
+            self.joint_consumer_thread.start()
+            self.end_effector_consumer_thread.start()
 
     def stop(self):
         """停止消费线程"""
         self.running = False
         if self.video_consumer_thread:
             self.video_consumer_thread.join()
-        if self.state_consumer_thread:
-            self.state_consumer_thread.join()
-        if self.gripper_consumer_thread:
-            self.gripper_consumer_thread.join()
-        # 结束会话并保存元数据
-        self.finish_session()
+        if self.pose_consumer_thread:
+            self.pose_consumer_thread.join()
+        if self.joint_consumer_thread:
+            self.joint_consumer_thread.join()
+        if self.end_effector_consumer_thread:
+            self.end_effector_consumer_thread.join()
+        
 
     def _consume_video(self):
         """消费视频帧线程：不断取出视频队列头部数据并存储到本地"""
@@ -232,56 +245,62 @@ class DataCollect:
             except queue.Empty:
                 pass
 
-    def _consume_state(self):
-        """消费机械臂状态线程：不断取出状态队列头部数据并存储到本地"""
+    def _consume_pose(self):
+        """消费机械臂位姿线程：不断取出位姿队列头部数据并存储到本地"""
         while self.running:
             try:
-                ts, state, arm_id = self.state_queue.get(timeout=0.1)
+                ts, pose_data, arm_id = self.pose_queue.get(timeout=0.1)
                 # Check capture state before saving
-                if self.capture_state == 1 and arm_id in self.pose_files and arm_id in self.joint_files:
-                    # state是一个包含(timestamp, (pose, joints))的元组
-                    # pose是位姿数组，joints是关节数组
-                    if isinstance(state, tuple) and len(state) >= 2:
-                        pose_data, joint_data = state
+                if self.capture_state == 1 and arm_id in self.pose_files:
+                    # pose_data是位姿数组
+                    if isinstance(pose_data, (list, tuple)):
+                        with open(self.pose_files[arm_id], "a", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f)
+                            for i, value in enumerate(pose_data):
+                                writer.writerow([f"{ts:.3f}", i, value])
                         
-                        # 写入位姿数据到poses.csv
-                        if isinstance(pose_data, (list, tuple)):
-                            with open(self.pose_files[arm_id], "a", newline="", encoding="utf-8") as f:
-                                writer = csv.writer(f)
-                                for i, value in enumerate(pose_data):
-                                    writer.writerow([f"{ts:.3f}", i, value])
-                                    
-                        # 写入关节数据到joints.csv
-                        if isinstance(joint_data, (list, tuple)):
-                            with open(self.joint_files[arm_id], "a", newline="", encoding="utf-8") as f:
-                                writer = csv.writer(f)
-                                for i, value in enumerate(joint_data):
-                                    writer.writerow([f"{ts:.3f}", i, value])
-                        
-                self.state_queue.task_done()
+                self.pose_queue.task_done()
             except queue.Empty:
                 pass
 
-    def _consume_gripper(self):
+    def _consume_joint(self):
+        """消费机械臂关节线程：不断取出关节队列头部数据并存储到本地"""
+        while self.running:
+            try:
+                ts, joint_data, arm_id = self.joint_queue.get(timeout=0.1)
+                # Check capture state before saving
+                if self.capture_state == 1 and arm_id in self.joint_files:
+                    # joint_data是关节数组
+                    if isinstance(joint_data, (list, tuple)):
+                        with open(self.joint_files[arm_id], "a", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f)
+                            for i, value in enumerate(joint_data):
+                                writer.writerow([f"{ts:.3f}", i, value])
+                        
+                self.joint_queue.task_done()
+            except queue.Empty:
+                pass
+
+    def _consume_end_effector(self):
         """消费夹爪状态线程：不断取出夹爪队列头部数据并存储到本地"""
         while self.running:
             try:
-                ts, gripper_state, arm_id = self.gripper_queue.get(timeout=0.1)
+                ts, end_effector, arm_id = self.end_effector_queue.get(timeout=0.1)
                 # Check capture state before saving
-                if self.capture_state == 1 and arm_id in self.gripper_files:
-                    # 写入夹爪数据到grippers.csv
-                    if isinstance(gripper_state, (list, tuple, dict)):
-                        with open(self.gripper_files[arm_id], "a", newline="", encoding="utf-8") as f:
+                if self.capture_state == 1 and arm_id in self.end_effector_files:
+                    # 写入夹爪数据到end_effector.csv
+                    if isinstance(end_effector, (list, tuple, dict)):
+                        with open(self.end_effector_files[arm_id], "a", newline="", encoding="utf-8") as f:
                             writer = csv.writer(f)
-                            if isinstance(gripper_state, dict):
+                            if isinstance(end_effector, dict):
                                 # 如果是字典，遍历键值对
-                                for key, value in gripper_state.items():
+                                for key, value in end_effector.items():
                                     writer.writerow([f"{ts:.3f}", key, value])
                             else:
                                 # 如果是列表或元组，遍历索引和值
-                                for i, value in enumerate(gripper_state):
+                                for i, value in enumerate(end_effector):
                                     writer.writerow([f"{ts:.3f}", i, value])
                         
-                self.gripper_queue.task_done()
+                self.end_effector_queue.task_done()
             except queue.Empty:
                 pass
