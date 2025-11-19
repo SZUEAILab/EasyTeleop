@@ -8,6 +8,7 @@ from scipy.interpolate import interp1d
 from collections import defaultdict
 import argparse
 import io
+from bisect import bisect_left
 
 
 class DataPostProcessor:
@@ -22,6 +23,7 @@ class DataPostProcessor:
         self.temp_dir = temp_dir
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
+        self._placeholder_bytes = None
         
     def find_sessions(self):
         """
@@ -131,6 +133,34 @@ class DataPostProcessor:
                     
         return metadata, image_data, arm_data
     
+    def _get_placeholder_image_bytes(self):
+        """
+        返回一个缓存的占位图像字节数据，避免重复创建。
+        """
+        if self._placeholder_bytes is None:
+            buffer = io.BytesIO()
+            placeholder = Image.new('RGB', (224, 224), color='black')
+            placeholder.save(buffer, format='JPEG')
+            self._placeholder_bytes = buffer.getvalue()
+        return self._placeholder_bytes
+    
+    def _load_image_bytes(self, image_path):
+        """
+        将任意支持的图像文件读取为JPEG字节，失败时返回占位图像。
+        """
+        if not image_path or not os.path.exists(image_path):
+            print(f"Missing image at {image_path}, using placeholder.")
+            return self._get_placeholder_image_bytes()
+        
+        try:
+            with Image.open(image_path) as image:
+                buffer = io.BytesIO()
+                image.save(buffer, format='JPEG')
+                return buffer.getvalue()
+        except Exception as e:
+            print(f"Error loading image {image_path}: {e}")
+            return self._get_placeholder_image_bytes()
+    
     def interpolate_states(self, image_timestamps, state_timestamps, state_values):
         """
         对状态数据进行插值以匹配图像时间戳
@@ -160,9 +190,36 @@ class DataPostProcessor:
         interpolated_states = f_values(image_timestamps)
         return interpolated_states
     
+    def find_closest_timestamp(self, target_timestamp, timestamps):
+        """
+        在时间戳列表中找到最接近目标时间戳的值
+        
+        Args:
+            target_timestamp (float): 目标时间戳
+            timestamps (list): 时间戳列表
+            
+        Returns:
+            float: 最接近的时间戳
+        """
+        if not timestamps:
+            return None
+            
+        # 假设timestamps已经排序，使用bisect快速定位
+        pos = bisect_left(timestamps, target_timestamp)
+        if pos == 0:
+            return timestamps[0]
+        if pos == len(timestamps):
+            return timestamps[-1]
+        
+        before = timestamps[pos - 1]
+        after = timestamps[pos]
+        if (target_timestamp - before) <= (after - target_timestamp):
+            return before
+        return after
+    
     def process_session_to_hdf5(self, session_id, output_file=None):
         """
-        将指定会话的数据处理为HDF5格式
+        将指定会话的数据处理为HDF5格式，以camera_0为时间戳主轴
         
         Args:
             session_id (str): 会话ID
@@ -184,12 +241,14 @@ class DataPostProcessor:
             print(f"No arm data found for session {session_id}")
             return
             
-        # 排序时间戳
-        # 合并所有摄像头的时间戳并去重
-        all_image_timestamps = set()
-        for camera_id in image_data:
-            all_image_timestamps.update(image_data[camera_id].keys())
-        sorted_image_timestamps = sorted(list(all_image_timestamps))
+        # 使用camera_0作为主时间轴
+        if 0 not in image_data:
+            print("No camera_0 data found. Cannot use it as master timeline.")
+            return
+            
+        # 获取camera_0的时间戳作为主时间轴
+        master_timestamps = sorted(image_data[0].keys())
+        print(f"Using camera_0 as master timeline with {len(master_timestamps)} timestamps")
         
         # 处理每个臂的数据
         processed_arm_data = {}
@@ -265,10 +324,10 @@ class DataPostProcessor:
             joint_data_array = np.array(joint_data_list) if joint_data_list else np.array([]).reshape(0, joint_dim or 6)
             end_effector_data_array = np.array(end_effector_data_list) if end_effector_data_list else np.array([]).reshape(0, end_effector_dim or 1)
             
-            # 对状态数据进行插值以匹配图像时间戳
-            interp_poses = self.interpolate_states(sorted_image_timestamps, sorted_pose_timestamps, pose_data_array)
-            interp_joints = self.interpolate_states(sorted_image_timestamps, sorted_joint_timestamps, joint_data_array)
-            interp_end_effectors = self.interpolate_states(sorted_image_timestamps, sorted_end_effector_timestamps, end_effector_data_array)
+            # 对状态数据进行插值以匹配主时间轴
+            interp_poses = self.interpolate_states(master_timestamps, sorted_pose_timestamps, pose_data_array)
+            interp_joints = self.interpolate_states(master_timestamps, sorted_joint_timestamps, joint_data_array)
+            interp_end_effectors = self.interpolate_states(master_timestamps, sorted_end_effector_timestamps, end_effector_data_array)
             
             processed_arm_data[arm_id] = {
                 "pose": interp_poses,
@@ -288,86 +347,82 @@ class DataPostProcessor:
             info_group = hdf5_file.create_group("info")
             
             # 保存图像数据，符合view_hdf5要求的格式
-            # 为每个摄像头创建数据集
+            # 为每个摄像头创建数据集，基于主时间轴匹配其他摄像头帧
             for camera_id in sorted(image_data.keys()):
-                # 使用更友好的摄像头名称，符合view_hdf5期望的命名方式
-                camera_name = f"cam_{camera_id}" 
+                camera_name = f"cam_{camera_id}"
                 
-                # 收集该摄像头的所有图像数据
+                # 收集该摄像头的所有图像数据，基于主时间轴进行匹配
                 image_list = []
-                for timestamp in sorted_image_timestamps:
-                    if timestamp in image_data[camera_id]:
-                        image_path = image_data[camera_id][timestamp]
-                        try:
-                            # 直接读取图像字节数据，不转换为JPEG格式
-                            with open(image_path, 'rb') as f:
-                                image_bytes = f.read()
-                            print(len(image_bytes))
-                            # 确保数据是bytes类型并且不为空
-                            if isinstance(image_bytes, bytes) and len(image_bytes) > 0:
-                                image_list.append(image_bytes)
-                            else:
+                if camera_id == 0:
+                    # camera_0是主时间轴，直接使用其数据
+                    for timestamp in master_timestamps:
+                        if timestamp in image_data[camera_id]:
+                            image_path = image_data[camera_id][timestamp]
+                            try:
+                                # 读取图像并转换为JPEG格式的字节数据
+                                image = Image.open(image_path)
+                                buffer = io.BytesIO()
+                                image.save(buffer, format='JPEG')
+                                image_bytes = buffer.getvalue()
+                                image_list.append(image_bytes)  # 直接使用bytes而不是np.void
+                            except Exception as e:
+                                print(f"Error loading image {image_path}: {e}")
                                 # 添加一个空图像作为占位符
-                                image_list.append(b'')
-                        except Exception as e:
-                            print(f"Error loading image {image_path}: {e}")
+                                buffer = io.BytesIO()
+                                placeholder = Image.new('RGB', (224, 224), color='black')
+                                placeholder.save(buffer, format='JPEG')
+                                image_list.append(buffer.getvalue())  # 直接使用bytes而不是np.void
+                        else:
+                            print(f"No image found for timestamp {timestamp} in camera {camera_id}")
                             # 添加一个空图像作为占位符
-                            image_list.append(b'')
-                    else:
-                        # 添加一个空图像作为占位符
-                        image_list.append(b'')
-                
+                            buffer = io.BytesIO()
+                            placeholder = Image.new('RGB', (224, 224), color='black')
+                            placeholder.save(buffer, format='JPEG')
+                            image_list.append(buffer.getvalue())  # 直接使用bytes而不是np.void
+                else:
+                    # 对于其他摄像头，需要基于主时间轴进行时间戳匹配
+                    for master_ts in master_timestamps:
+                        # 在当前摄像头中找到最接近主时间轴的时间戳
+                        closest_ts = self.find_closest_timestamp(master_ts, list(image_data[camera_id].keys()))
+                        
+                        if closest_ts and closest_ts in image_data[camera_id]:
+                            image_path = image_data[camera_id][closest_ts]
+                            try:
+                                # 读取图像并转换为JPEG格式的字节数据
+                                image = Image.open(image_path)
+                                buffer = io.BytesIO()
+                                image.save(buffer, format='JPEG')
+                                image_bytes = buffer.getvalue()
+                                image_list.append(image_bytes)  # 直接使用bytes而不是np.void
+                            except Exception as e:
+                                print(f"Error loading image {image_path}: {e}")
+                                # 添加一个空图像作为占位符
+                                buffer = io.BytesIO()
+                                placeholder = Image.new('RGB', (224, 224), color='black')
+                                placeholder.save(buffer, format='JPEG')
+                                image_list.append(buffer.getvalue())  # 直接使用bytes而不是np.void
+                        else:
+                            print(f"No image found for timestamp {master_ts} in camera {camera_id}")
+                            # 添加一个空图像作为占位符
+                            buffer = io.BytesIO()
+                            placeholder = Image.new('RGB', (224, 224), color='black')
+                            placeholder.save(buffer, format='JPEG')
+                            image_list.append(buffer.getvalue())  # 直接使用bytes而不是np.void
+                print(f"Saved {len(image_list)} images for camera {camera_name}")
+                # 创建数据集
                 try:
-                    # 确保数据集中没有重复名称
-                    if camera_name in image_group:
-                        del image_group[camera_name]
-                    
-                    # 创建数据集，使用h5py.string_dtype()而不是JPEG格式
+                    # 以可变长uint8数组形式写入原始二进制，避免字符串类型的NULL限制
+                    binary_dtype = h5py.vlen_dtype(np.dtype('uint8'))
+                    image_arrays = [np.frombuffer(img_bytes, dtype=np.uint8) for img_bytes in image_list]
                     image_dataset = image_group.create_dataset(
                         camera_name,
-                        data=np.array(image_list, dtype=h5py.string_dtype()),
+                        data=np.array(image_arrays, dtype=object),
+                        dtype=binary_dtype,
                         compression='gzip'
                     )
-                    print(f"Successfully created dataset for camera {camera_name}")
                 except Exception as e:
-                    print(f"Error creating dataset for camera {camera_name}: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # 创建一个空的数据集作为后备
-                    try:
-                        # 确保数据集中没有重复名称
-                        if camera_name in image_group:
-                            del image_group[camera_name]
-                            
-                        empty_images = [b'' for _ in range(len(sorted_image_timestamps))]
-                        image_dataset = image_group.create_dataset(
-                            camera_name,
-                            data=np.array(empty_images, dtype=h5py.special_dtype(vlen=bytes)),
-                            compression='gzip'
-                        )
-                        print(f"Created fallback empty dataset for camera {camera_name}")
-                    except Exception as e2:
-                        print(f"Second attempt failed for camera {camera_name}: {e2}")
-                        import traceback
-                        traceback.print_exc()
-                        try:
-                            # 创建最小化的空数据集
-                            if camera_name in image_group:
-                                del image_group[camera_name]
-                                
-                            image_dataset = image_group.create_dataset(
-                                camera_name,
-                                shape=(len(sorted_image_timestamps),),
-                                dtype=h5py.special_dtype(vlen=bytes),
-                                compression='gzip'
-                            )
-                            print(f"Created minimal fallback dataset for camera {camera_name}")
-                        except Exception as e3:
-                            print(f"Third attempt failed for camera {camera_name}: {e3}")
-                            # 最后的备选方案
-                            if camera_name in image_group:
-                                del image_group[camera_name]
-            
+                    print(f"Error creating dataset with string_dtype for {camera_name}: {e}")
+                   
             # 保存状态数据（观测值）
             # 为每个臂创建子组
             for arm_id in processed_arm_data:
@@ -386,7 +441,7 @@ class DataPostProcessor:
                 arm_group.create_dataset("joint", data=arm_data["joint"], compression='gzip')
                 arm_group.create_dataset("end_effector", data=arm_data["end_effector"], compression='gzip')
             
-            action_group.create_dataset("timestamps", data=np.array(sorted_image_timestamps), compression='gzip')
+            action_group.create_dataset("timestamps", data=np.array(master_timestamps), compression='gzip')
             
             # 保存元数据
             def safe_set_attr(group, key, value):
@@ -412,7 +467,7 @@ class DataPostProcessor:
             
             # 使用安全的方法设置info_group属性
             safe_set_attr(info_group, "total_episodes", 1)
-            safe_set_attr(info_group, "total_frames", len(sorted_image_timestamps))
+            safe_set_attr(info_group, "total_frames", len(master_timestamps))
             safe_set_attr(info_group, "num_cameras", len(image_data))
             safe_set_attr(info_group, "num_arms", len(processed_arm_data))
             safe_set_attr(info_group, "version", "1.0")

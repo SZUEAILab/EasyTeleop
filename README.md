@@ -126,6 +126,26 @@ uv build --wheel
 - [run_singel_arm_with_right_controller.py](run/run_singel_arm_with_right_controller.py): 单臂控制示例
 - [run_interpolation.py](run/run_interpolation.py): 插值算法演示
 
+### 数据后处理（PostProcess）
+
+数据采集脚本会把每次遥操作会话拆分保存在 `datasets/temp/<session_id>` 中（包含 `metadata.json`、`frames/`、`arm_#/` 等目录）。`run/run_postprocess.py` 会读取这些原始文件并生成可用于训练/回放的 HDF5 文件。
+
+1. 确保采集好的会话位于 `datasets/temp`（或者使用 `--temp_dir` 指定其他路径）。
+2. 执行后处理脚本：
+   ```bash
+   # 处理单个会话
+   uv run run/run_postprocess.py --session demo_001
+
+   # 批量处理所有会话并指定输出目录
+   uv run run/run_postprocess.py --temp_dir datasets/temp --output_dir datasets/hdf5
+   ```
+3. 每个会话会生成一个同名的 `.hdf5` 文件（默认输出到 `datasets/hdf5`）。
+
+脚本支持以下参数：
+- `--temp_dir`：原始数据所在目录，默认为 `datasets/temp`
+- `--output_dir`：HDF5 输出目录，默认为 `datasets/hdf5`
+- `--session`：只处理指定的会话 ID；不传则处理全部
+
 ### 启动服务
 
 运行测试脚本:
