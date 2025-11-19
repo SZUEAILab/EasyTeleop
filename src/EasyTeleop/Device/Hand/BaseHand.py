@@ -1,46 +1,52 @@
-from ..BaseDevice import BaseDevice
-from collections import deque
-from abc import abstractmethod
+import asyncio
+from abc import ABC, abstractmethod
 
-class BaseHand(BaseDevice):
+class BaseHand(ABC):
+    """异步灵巧手控制基类"""
+    name = "基础灵巧手"
+    description = "灵巧手控制基类"
+    need_config = {}
+
     def __init__(self, config):
-        super().__init__(config)
+        self.config = config
+        self.is_connected = False
+        self.event_listeners = {}  # 事件监听回调
 
-        self._events.update({
-            "state": self._default_callback,#机械手状态，List
-        })
+    def on(self, event, callback):
+        """注册事件监听"""
+        if event not in self.event_listeners:
+            self.event_listeners[event] = []
+        self.event_listeners[event].append(callback)
 
-        # 使用deque作为hand_queue，设置maxlen为10，当超过长度时自动移除最旧的元素
-        self.hand_queue = deque(maxlen=10)
-
-        self.current_hand_data = None
-        # 控制线程
-        self.is_controlling = False
-        self.control_thread = None
-        self.control_thread_running = False
-
-    def add_hand_data(self,hand_data: list):
-        self.hand_queue.append(hand_data)
+    async def emit(self, event, data):
+        """异步触发事件"""
+        if event in self.event_listeners:
+            # 并发执行所有回调
+            await asyncio.gather(
+                *[callback(data) for callback in self.event_listeners[event]]
+            )
 
     @abstractmethod
-    def handle_openxr(self, hand_data: dict) -> list:
-        """
-        处理OpenXR数据成自身控制需要的值
-        :param openxr_data: OpenXR数据
-        :return: List,自身控制所需的数据
-        """
-    @abstractmethod
-    def start_control(self) -> None:
-        """
-        开始控制手
-        :return: None
-        """
+    async def _connect_device(self) -> bool:
+        """异步连接设备"""
         pass
 
     @abstractmethod
-    def stop_control(self) -> None:
+    async def _disconnect_device(self) -> bool:
+        """异步断开连接"""
         pass
 
     @abstractmethod
-    def _control_loop(self) -> None:
+    async def start_control(self) -> None:
+        """启动异步控制任务"""
+        pass
+
+    @abstractmethod
+    async def stop_control(self) -> None:
+        """停止异步控制任务"""
+        pass
+
+    @abstractmethod
+    async def handle_openxr(self, hand_data: dict) -> list:
+        """处理OpenXR数据"""
         pass
