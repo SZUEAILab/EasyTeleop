@@ -2,6 +2,7 @@ from .BaseHand import BaseHand
 import time
 import numpy as np
 import asyncio
+import threading
 from .bc.revo2 import revo2_utils
 
 class Revo2Direct(BaseHand):
@@ -44,6 +45,8 @@ class Revo2Direct(BaseHand):
         # 控制任务与队列
         self.control_task = None
         self.control_running = False
+        self._control_future = None
+        self._control_requested = False
         self.hand_queue = []
         self.last_fingers = [0]*6
         
@@ -55,8 +58,14 @@ class Revo2Direct(BaseHand):
         self.monitor_task = None
         self.monitor_running = False
 
-    async def set_config(self, config):
-        """异步验证并设置配置"""
+        # 异步事件循环
+        self.control_loop = None
+        # SDK 专用事件循环（长期运行，用于 libstark 客户端）
+        self._sdk_loop = None
+        self._sdk_thread = None
+
+    def set_config(self, config):
+        """验证并设置配置（同步接口，满足 BaseDevice 约束）"""
         for key in self.need_config:
             if key not in config:
                 raise ValueError(f"缺少配置字段: {key}")
@@ -64,85 +73,207 @@ class Revo2Direct(BaseHand):
         self.config = config
         return True
 
-    async def _connect_device(self) -> bool:
-        """异步连接灵巧手"""
+    def _run_coro_sync(self, coro):
+        """在 SDK 的后台事件循环中运行协程并返回结果（线程安全）。
+
+        使用单一长期运行的事件循环来创建并管理 client 对象，避免 client 绑定到已关闭的 loop
+        导致 "no running event loop" 错误。
+        """
+        # 创建 SDK 事件循环（如果尚未创建）
+        if self._sdk_loop is None:
+            self._ensure_sdk_loop()
+
+        # 使用 run_coroutine_threadsafe 在后台 loop 中调度协程并等待结果
+        future = asyncio.run_coroutine_threadsafe(coro, self._sdk_loop)
         try:
-            # 异步建立连接
-            self.client, detected_id = await revo2_utils.open_modbus_revo2(
-                port_name=self.config["port"]
+            return future.result(timeout=5)
+        except Exception:
+            # 在超时或异常时取消任务并抛出异常
+            try:
+                future.cancel()
+            except Exception:
+                pass
+            raise
+
+    def _call_client_async(self, coro_func, *args, **kwargs):
+        """确保 client 的异步方法在 SDK loop 中执行，避免在主线程求值"""
+
+        async def _runner():
+            return await coro_func(*args, **kwargs)
+
+        return self._run_coro_sync(_runner())
+
+    def _ensure_sdk_loop(self):
+        """创建并启动用于 SDK 的后台事件循环（长期运行线程）。"""
+        if self._sdk_loop is not None:
+            return
+
+        loop = asyncio.new_event_loop()
+        self._sdk_loop = loop
+
+        def _run_loop():
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_forever()
+            finally:
+                # 在 loop 停止后，关闭 loop
+                try:
+                    loop.close()
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_run_loop, daemon=True)
+        self._sdk_thread = t
+        t.start()
+
+    def _connect_device(self) -> bool:
+        """同步连接灵巧手（在内部运行 SDK 的异步接口）"""
+        try:
+            # 使用新的事件循环运行 SDK 的异步打开函数
+            client, detected_id = self._run_coro_sync(
+                revo2_utils.open_modbus_revo2(port_name=self.config["port"])
             )
+            self.client = client
             self.slave_id = detected_id or self.slave_id
-            
-            # 配置控制模式
-            await self.client.set_finger_unit_mode(
-                self.slave_id, 
-                revo2_utils.libstark.FingerUnitMode.Normalized
+
+            # 配置控制模式（通过同步运行协程）
+            self._call_client_async(
+                self.client.set_finger_unit_mode,
+                self.slave_id,
+                revo2_utils.libstark.FingerUnitMode.Normalized,
             )
-            
-            self.is_connected = True
+
             print(f"[Revo2Direct] 灵巧手连接成功: ID={self.slave_id:02x}")
-            
-            # 启动状态监控
-            await self.start_monitor()
+            # 如果用户已经请求开启控制，则在连接完成后自动启动控制
+            if self._control_requested and not self.control_running:
+                self._start_control_task()
             return True
         except Exception as e:
             print(f"[Revo2Direct] 连接错误: {str(e)}")
-            self.is_connected = False
+            return False
             return False
 
-    async def _disconnect_device(self) -> bool:
-        """异步断开连接"""
+    def _disconnect_device(self) -> bool:
+        """同步断开连接并停止控制/监控"""
         if self.client:
-            revo2_utils.libstark.modbus_close(self.client)
+            try:
+                revo2_utils.libstark.modbus_close(self.client)
+            except Exception:
+                pass
             self.client = None
-            self.is_connected = False
             print("[Revo2Direct] 灵巧手已断开")
-        
-        # 停止所有任务
-        await self.stop_control()
-        await self.stop_monitor()
+
+        # 关闭 SDK 后台事件循环
+        try:
+            if self._sdk_loop is not None:
+                try:
+                    self._sdk_loop.call_soon_threadsafe(self._sdk_loop.stop)
+                except Exception:
+                    pass
+                if self._sdk_thread is not None and self._sdk_thread.is_alive():
+                    self._sdk_thread.join(timeout=1.0)
+                self._sdk_thread = None
+                self._sdk_loop = None
+        except Exception:
+            pass
+
+        # 停止所有任务（同步接口）
+        try:
+            self._stop_control_task()
+        except Exception:
+            pass
         return True
 
-    async def start_control(self) -> None:
-        """启动异步控制任务"""
-        if not self.control_running and self.is_connected:
-            self.control_running = True
-            self.control_task = asyncio.create_task(self._control_loop())
-            print(f"[Revo2Direct] 控制任务启动（{self.control_fps}Hz）")
+    def start_control(self) -> None:
+        """启动控制任务；若尚未连接则在连接完成后自动启动。"""
+        self._control_requested = True
+        if self.get_conn_status() != 1:
+            print("[Revo2Direct] 连接未完成，控制任务将在连接成功后自动启动")
+            return
+        self._start_control_task()
 
-    async def stop_control(self) -> None:
-        """停止异步控制任务"""
+    def _start_control_task(self):
+        """实际启动控制循环任务（运行在 SDK loop 中）"""
         if self.control_running:
+            return
+        self.control_running = True
+        self._ensure_sdk_loop()
+        try:
+            self._control_future = asyncio.run_coroutine_threadsafe(self._control_loop(), self._sdk_loop)
+        except Exception as e:
+            print(f"[Revo2Direct] 启动控制任务失败: {e}")
             self.control_running = False
-            if self.control_task:
-                await asyncio.wait([self.control_task])
-            print("[Revo2Direct] 控制任务停止")
+            self._control_future = None
+            return
+        print(f"[Revo2Direct] 控制任务启动（{self.control_fps}Hz）")
+
+    def _control_thread_entry(self):
+        # 旧的线程入口已废弃，控制任务现在运行在 SDK 的长期事件循环中
+        pass
+
+    def stop_control(self) -> None:
+        """停止控制任务（同步接口）"""
+        self._control_requested = False
+        self._stop_control_task()
+
+    def _stop_control_task(self):
+        """内部方法：停止控制协程，但保留控制请求状态"""
+        if not self.control_running:
+            self._control_future = None
+            return
+        self.control_running = False
+        if self._control_future is not None:
+            try:
+                self._control_future.cancel()
+            except Exception:
+                pass
+            try:
+                self._control_future.result(timeout=1.0)
+            except Exception:
+                pass
+            self._control_future = None
+        print("[Revo2Direct] 控制任务停止")
 
     async def _control_loop(self):
-        """异步控制主循环"""
+        """异步控制主循环（运行在独立事件循环里）"""
         while self.control_running:
             t_start = time.time()
-            
+
             # 处理最新的手指数据
             if self.hand_queue:
-                # 取出最新数据
-                target_fingers = self.hand_queue.pop(-1)
-                self.hand_queue.clear()
-                
-                # 滤波处理
-                filtered_fingers = self._smooth_filter(target_fingers)
-                
-                # 转换为千分比范围
-                scaled_positions = [int(v * 10) for v in filtered_fingers]
-                
-                # 发送位置指令
-                await self._send_finger_positions(
-                    scaled_positions, 
-                    duration=int(self.dT * 1000)
-                )
-                
-                self.last_fingers = filtered_fingers
-            
+                # 取出最新数据（BaseHand 使用 deque, 这里保持兼容）
+                try:
+                    target_fingers = self.hand_queue.pop()
+                except Exception:
+                    target_fingers = None
+                # 清空队列
+                try:
+                    self.hand_queue.clear()
+                except Exception:
+                    pass
+
+                if target_fingers is not None:
+                    # 滤波处理
+                    filtered_fingers = self._smooth_filter(target_fingers)
+
+                    # 转换为千分比范围
+                    scaled_positions = [int(v * 10) for v in filtered_fingers]
+
+                    # 发送位置指令（调用 SDK 的异步接口）
+                    try:
+                        await asyncio.wait_for(
+                            self.client.set_finger_positions_and_durations(
+                                self.slave_id,
+                                positions=scaled_positions,
+                                durations=[int(self.dT * 1000)] * 6
+                            ),
+                            timeout=0.1,
+                        )
+                    except Exception as e:
+                        print(f"[Revo2Direct] 指令发送失败: {str(e)}")
+
+                    self.last_fingers = filtered_fingers
+
             # 控制帧率
             t_elapsed = time.time() - t_start
             sleep_time = self.dT - t_elapsed
@@ -156,54 +287,6 @@ class Revo2Direct(BaseHand):
             self.filter_history.pop(0)
         return np.mean(self.filter_history, axis=0).clip(0, 100).tolist()
 
-    async def _send_finger_positions(self, positions, duration):
-        """异步发送位置+时间指令"""
-        try:
-            await asyncio.wait_for(
-                self.client.set_finger_positions_and_durations(
-                    self.slave_id,
-                    positions=positions,
-                    durations=[duration]*6
-                ),
-                timeout=0.1
-            )
-        except Exception as e:
-            print(f"[Revo2Direct] 指令发送失败: {str(e)}")
-
-    async def start_monitor(self):
-        """启动异步状态监控"""
-        if not self.monitor_running and self.is_connected:
-            self.monitor_running = True
-            self.monitor_task = asyncio.create_task(self._monitor_loop())
-
-    async def stop_monitor(self):
-        """停止异步监控任务"""
-        if self.monitor_running:
-            self.monitor_running = False
-            if self.monitor_task:
-                await asyncio.wait([self.monitor_task])
-
-    async def _monitor_loop(self):
-        """异步状态监控循环"""
-        while self.monitor_running and self.is_connected:
-            try:
-                # 异步获取电机状态
-                status = await asyncio.wait_for(
-                    self.client.get_motor_status(self.slave_id),
-                    timeout=0.5
-                )
-                
-                # 解析状态信息
-                state_data = {
-                    "positions": [p / 10 for p in status.positions],
-                    "speeds": list(status.speeds),
-                    "currents": list(status.currents),
-                    "is_idle": status.is_idle()
-                }
-                await self.emit("hand_state", state_data)
-            except Exception as e:
-                print(f"[Revo2Direct] 状态获取失败: {str(e)}")
-            await asyncio.sleep(0.1)
 
     def handle_openxr(self, hand_data: dict) -> list:
         """
@@ -472,26 +555,58 @@ class Revo2Direct(BaseHand):
         return np.clip(calibrated, 0, 100)
 
     def add_hand_data(self, data):
-        """添加手指控制数据到队列"""
-        self.hand_queue.append(data)
-        
-    # 一个人畜无害的测试代码    
-    async def set_finger_positions(self, positions: list):
-        """直接设置手指位置（用于测试）"""
-        if not self.is_connected:
+        """添加手指控制数据到队列（兼容 BaseHand 的 deque 接口）"""
+        try:
+            self.hand_queue.append(data)
+        except Exception:
+            # 如果 hand_queue 不是 deque，则退回到列表追加
+            if isinstance(self.hand_queue, list):
+                self.hand_queue.append(data)
+          
+    def set_finger_positions(self, positions: list):
+        """直接设置手指位置（同步封装，用于测试）"""
+        if self.get_conn_status() != 1:
             print("[Revo2Direct] 未连接，无法发送控制指令")
             return False
         try:
-            # 假设 client 是 Modbus 客户端实例，slave_id 是设备ID
-            # 位置范围通常是 0（张开）~ 1000（闭合）
-            await self.client.set_finger_positions(self.slave_id, positions)
+            # 使用 SDK loop 同步运行异步 SDK 接口
+            self._call_client_async(self.client.set_finger_positions, self.slave_id, positions)
             print(f"[Revo2Direct] 发送位置指令: {positions}")
             return True
         except Exception as e:
             print(f"[Revo2Direct] 发送指令失败: {e}")
-            return False    
+            return False
 
     def _main(self):
-        """设备主循环"""
-        while self.running:
-            time.sleep(0.1)
+        """设备主逻辑（同步）
+
+        由 BaseDevice._main_loop 在连接成功后调用。这里保持一个简单循环以保持线程活跃，
+        控制/监控在各自线程中运行。
+        """
+        # 将监控轮询合并到主循环中：以同步方式通过 _run_coro_sync 调用 SDK 的异步状态查询
+        monitor_interval = 0.1
+        last_monitor = 0.0
+        try:
+            while self.get_conn_status() == 1:
+                t_now = time.time()
+                # 轮询监控
+                # if self.client and (t_now - last_monitor) >= monitor_interval:
+                #     last_monitor = t_now
+                #     try:
+                #         status = self._run_coro_sync(self.client.get_motor_status(self.slave_id))
+                #         if status is not None:
+                #             state_data = {
+                #                 "positions": [p / 10 for p in status.positions],
+                #                 "speeds": list(status.speeds),
+                #                 "currents": list(status.currents),
+                #                 "is_idle": status.is_idle()
+                #             }
+                #             # emit 是非阻塞的（会在独立线程中运行回调）
+                #             self.emit("hand_state", state_data)
+                #     except Exception as e:
+                #         print(f"[Revo2Direct] 状态获取失败: {str(e)}")
+
+                # 让出时间片，避免忙等待
+                time.sleep(0.01)
+        except Exception:
+            pass
