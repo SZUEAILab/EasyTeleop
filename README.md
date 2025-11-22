@@ -144,9 +144,12 @@ uv build --wheel
 脚本支持以下常用参数：
 - `--temp_dir`：原始数据所在目录，默认为 `datasets/temp`
 - `--output_dir`：HDF5 输出目录，默认为 `datasets/hdf5`
-- `--session`：只处理指定的会话 ID；不传则处理全部
-- `--latest`：只处理最近修改的一个会话，与 `--session` 互斥
-- `--list`：仅列出 `temp_dir` 中的会话并退出
+- `--session`：可以一次传入一个或多个会话 ID；不传则处理全部
+- `--pattern`：使用通配符过滤会话（例如 `demo_*`），可与 `--latest` 组合
+- `--latest`：只处理过滤结果中最近修改的一个会话
+- `--list`：仅列出筛选后的会话并退出
+- `--skip_existing`：跳过已经存在同名 `.hdf5` 的会话
+- `--dry_run`：仅打印会被处理的会话，不真正生成文件
 
 运行过程中会完成：
 - 读取 `frames/camera_0` 的时间戳并将其作为所有模态的主时间轴；

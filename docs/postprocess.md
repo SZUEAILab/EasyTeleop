@@ -33,9 +33,12 @@ uv run run/run_postprocess.py `
 | --- | --- | --- |
 | `--temp_dir` | 原始会话所在目录。 | `datasets/temp` |
 | `--output_dir` | `.hdf5` 输出目录，不存在时会自动创建。 | `datasets/hdf5` |
-| `--session` | 只处理指定的会话 ID。 | _空_（处理全部） |
-| `--latest` | 仅处理最近修改的会话，与 `--session` 互斥。 | _空_ |
-| `--list` | 只列出检测到的会话并退出。 | _空_ |
+| `--session` | 传入一个或多个特定会话 ID。 | _空_（处理全部） |
+| `--pattern` | 使用通配符过滤会话（例如 `demo_*`）。 | _空_ |
+| `--latest` | 仅处理过滤结果中最近修改的会话。 | _空_ |
+| `--list` | 只列出匹配的会话并退出。 | _空_ |
+| `--skip_existing` | 跳过已存在同名 `.hdf5` 的会话。 | _空_ |
+| `--dry_run` | 仅打印计划处理的会话而不执行。 | _空_ |
 
 如果需要在自定义脚本中调用，可直接实例化 `DataPostProcessor(temp_dir, output_dir)`，再按需调用 `process_session_to_hdf5(session_id)` 或 `process_all_sessions()`。
 
