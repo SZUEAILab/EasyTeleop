@@ -1,11 +1,10 @@
 """
-本程序测试使用手柄扳机控制末端灵巧手和机械臂的效果
-利用VR手柄的扳机控制4指的弯曲度，控制灵巧手
+
 """
 from EasyTeleop.Components import TeleopMiddleware, HandVisualizer
 from EasyTeleop.Device.VR import VRSocket
 from EasyTeleop.Device.Robot import RealManWithIK
-from EasyTeleop.Device.Hand import Revo2OnRealMan
+from EasyTeleop.Device.Hand import Revo2Direct
 import time
 import numpy as np
     
@@ -42,9 +41,10 @@ if __name__ == '__main__':
         is_control = False
 
         r_arm = RealManWithIK({"ip": "192.168.0.19", "port": 8080})
-        r_hand = Revo2OnRealMan({"ip": "192.168.0.19", "port": 8080,"baudrate":460800, "address": 127}) 
+        r_hand = Revo2Direct({"port": "/dev/ttyUSB0", "slave_id": 0x7e,"control_fps":80, "hand_side": "left"}) 
+        
         l_arm = RealManWithIK({"ip": "192.168.0.18", "port": 8080})
-        l_hand = Revo2OnRealMan({"ip": "192.168.0.18", "port": 8080,"baudrate":460800, "address": 126})
+        l_hand = Revo2Direct({"port": "/dev/ttyUSB1", "slave_id": 0x7f,"control_fps":80, "hand_side": "right"}) 
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         visualizer = HandVisualizer()
@@ -109,7 +109,7 @@ if __name__ == '__main__':
                     if not is_control:
                         is_control = True
                         print("开始控制机械臂")
-                        l_arm.start_control()
+                        l_arm.start_control() 
                         r_arm.start_control()
 
             teleop.handle_socket_data(message)

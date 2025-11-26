@@ -12,8 +12,8 @@ if __name__ == '__main__':
     try:
         is_control = False
 
-        r_hand = Revo2Direct({"port": "com3", "slave_id": 0x7e,"control_fps":80, "hand_side": "left"}) 
-        l_hand = Revo2Direct({"port": "com4", "slave_id": 0x7f,"control_fps":80, "hand_side": "right"}) 
+        r_hand = Revo2Direct({"port": "/dev/ttyUSB0", "slave_id": 0x7e,"control_fps":80, "hand_side": "left"}) 
+        l_hand = Revo2Direct({"port": "/dev/ttyUSB1", "slave_id": 0x7f,"control_fps":80, "hand_side": "right"}) 
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         
@@ -31,7 +31,6 @@ if __name__ == '__main__':
                     left_hand_values = l_hand.handle_openxr(message['payload']['leftHand'])
 
                     if left_hand_values != [0, 0, 0, 0, 0, 0]:
-                        print(left_hand_values)
                         l_hand.add_hand_data(left_hand_values)
 
                 # 计算并打印右手灵巧手控制值
