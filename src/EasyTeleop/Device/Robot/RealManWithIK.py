@@ -52,12 +52,18 @@ class RealManWithIK(BaseRobot):
             "description": "睿尔曼机械臂端口号",
             "default": 8080
         },
+        "control_mode": {
+            "type": "integer",
+            "description": "0: 位姿相对，1: 位置相对姿态绝对，2: 位姿绝对",
+            "default": 0
+        },
     }
     
     def __init__(self, config: Dict[str, Any]):
         
         self.ip = None
         self.port = None
+        self.control_mode = 0
         
         super().__init__(config)
         
@@ -186,13 +192,21 @@ class RealManWithIK(BaseRobot):
         :return: 是否设置成功
         """
         # 检查必需的配置字段
-        for key in self.need_config:
-            if key not in config:
-                raise ValueError(f"缺少必需的配置字段: {key}")
+        config_with_default = dict(config)
+        for key, meta in self.need_config.items():
+            if key not in config_with_default:
+                if "default" in meta:
+                    config_with_default[key] = meta["default"]
+                else:
+                    raise ValueError(f"缺少必需的配置字段: {key}")
         
-        self.config = config
-        self.ip = config["ip"]
-        self.port = int(config["port"])
+        self.config = config_with_default
+        self.ip = config_with_default["ip"]
+        self.port = int(config_with_default["port"])
+        control_mode = int(config_with_default.get("control_mode", 0))
+        if control_mode not in (0, 1, 2):
+            raise ValueError("control_mode 仅支持 0、1、2")
+        self.control_mode = control_mode
         
         return True
     def get_pose_data(self):
@@ -294,13 +308,34 @@ class RealManWithIK(BaseRobot):
         """欧拉角控制"""
         for i in range(6):
             self.delta[i] = tech_state[i] - self.prev_tech_state[i]
-        # self.prev_tech_state = tech_state.copy()
-        hand_x = self.arm_first_state[0] + self.delta[0]
-        hand_y = self.arm_first_state[1] + self.delta[1]
-        hand_z = self.arm_first_state[2] + self.delta[2]
-        hand_roll = self.arm_first_state[3] + self.delta[3]
-        hand_pitch = self.arm_first_state[4] + self.delta[4]
-        hand_yaw = self.arm_first_state[5] + self.delta[5]
+
+        hand_x = 0
+        hand_y = 0
+        hand_z = 0
+        hand_roll = 0
+        hand_pitch = 0
+        hand_yaw = 0
+        if self.control_mode == 0:
+            hand_x = self.arm_first_state[0] + self.delta[0]
+            hand_y = self.arm_first_state[1] + self.delta[1]
+            hand_z = self.arm_first_state[2] + self.delta[2]
+            hand_roll = self.arm_first_state[3] + self.delta[3]
+            hand_pitch = self.arm_first_state[4] + self.delta[4]
+            hand_yaw = self.arm_first_state[5] + self.delta[5]
+        elif self.control_mode == 1:
+            hand_x = self.arm_first_state[0] + self.delta[0]
+            hand_y = self.arm_first_state[1] + self.delta[1]
+            hand_z = self.arm_first_state[2] + self.delta[2]
+            hand_roll = tech_state[3]
+            hand_pitch = tech_state[4]
+            hand_yaw = tech_state[5]
+        elif self.control_mode == 2:
+            hand_x = tech_state[0]
+            hand_y = tech_state[1]
+            hand_z = tech_state[2]
+            hand_roll = tech_state[3]
+            hand_pitch = tech_state[4]
+            hand_yaw = tech_state[5]
 
         # x, y, z, roll, pitch, yaw = self.hand_to_base_transform(
         #     hand_x, hand_y, hand_z, hand_roll, hand_pitch, hand_yaw
