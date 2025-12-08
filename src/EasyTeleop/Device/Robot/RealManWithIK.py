@@ -39,8 +39,8 @@ class RealManWithIK(BaseRobot):
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
     # 定义需要的配置字段为静态字段
-    name = "睿尔曼R75b机械臂"
-    description = "用于控制RealMan机械臂的机器人控制器"
+    name = "睿尔曼R75b机械臂(IK)"
+    description = "用于控制RealMan机械臂的机器人控制器，自带IK解算"
     need_config = {
         "ip": {
             "type": "string",
