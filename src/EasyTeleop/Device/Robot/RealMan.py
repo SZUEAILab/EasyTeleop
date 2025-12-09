@@ -66,8 +66,8 @@ class RealMan(BaseRobot):
             # 获取夹爪状态
             succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
             if not succ_gripper:
-                self.current_end_effector_data = gripper_state
-                self.emit("end_effector",self.current_end_effector_data)#调用回调函数
+                self.current_end_effector_data = gripper_state['actpos']
+                self.emit("end_effector",[self.current_end_effector_data])#调用回调函数
             else:
                 raise RuntimeError("Failed to get gripper state")
             # 帧率控制，而不是固定间隔

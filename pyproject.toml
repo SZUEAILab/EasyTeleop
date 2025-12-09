@@ -25,6 +25,7 @@ classifiers = [
 dependencies = [
     "aiortc>=1.13.0",
     "av>=14.4.0",
+    "h5py>=3.15.1",
     "matplotlib>=3.10.7",
     "numpy>=2.2.6",
     "opencv-python>=4.11.0.86",
