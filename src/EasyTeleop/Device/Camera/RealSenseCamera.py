@@ -33,10 +33,15 @@ class RealSenseCamera(BaseCamera):
         """
         context = rs.context()
         devices = context.query_devices()
-        # 打印设备信息
+        found = []
+        # 打印设备信息并返回列表
         print("可用的设备:")
         for i, device in enumerate(devices):
-            print(f"{i}: {device.get_info(rs.camera_info.name)} - Serial: {device.get_info(rs.camera_info.serial_number)}")
+            name = device.get_info(rs.camera_info.name)
+            serial = device.get_info(rs.camera_info.serial_number)
+            print(f"{i}: {name} - Serial: {serial}")
+            found.append({"name": name, "serial": serial})
+        return found
     def __init__(self, config: Dict[str, Any] = None):
         
         self.camera_serial = None
