@@ -159,6 +159,22 @@ uv build --wheel
 
 可以使用 `uv run run/view_hdf5.py --path datasets/hdf5/<session>.hdf5` 快速检查后处理结果和插值情况。更多流程细节、输入规范与排查技巧详见 [PostProcess 数据后处理指南](docs/postprocess.md)。
 
+### Docker 开发环境
+使用 Docker/Compose 可快速拉起开发容器（默认挂载本地代码，构建阶段已安装依赖并编译 qpSWIFT）。
+
+```bash
+# 构建镜像
+docker compose build
+
+# 进入开发容器（挂载当前仓库）
+docker compose run --rm easyteleop bash
+
+# 如需更新依赖或重新编译扩展，可在容器内执行：
+uv pip install --system -e .
+```
+
+如需直连硬件（RealSense/机械臂/VR 头显等），可根据宿主机情况在 `docker-compose.yml` 中开启 `devices` 映射或（Linux）启用 `network_mode: host`。
+
 ### 启动服务
 
 运行测试脚本:
