@@ -6,7 +6,7 @@ authors = [                         # 作者信息（支持多人）
 ]
 description = "Easy teleoperate tools for robotic devices control with VR headset"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
@@ -19,7 +19,6 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
 dependencies = [
@@ -29,7 +28,7 @@ dependencies = [
     "matplotlib>=3.10.7",
     "numpy>=2.2.6",
     "opencv-python>=4.11.0.86",
-    "pyrealsense2>=2.56.5.9235",
+    "pyrealsense2>=2.56",
     "robotic-arm>=1.1.1",
     "scipy>=1.15.3",
     "websockets>=15.0.1",
