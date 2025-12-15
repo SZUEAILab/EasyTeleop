@@ -13,21 +13,26 @@ if __name__ == '__main__':
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         camera1 = RealSenseCamera({"serial":"153122070447","target_fps": 30}) 
-        camera2 = RealSenseCamera({"serial":"427622270438","target_fps": 30}) 
-        camera3 = RealSenseCamera({"serial":"427622270277","target_fps": 30}) 
+        camera2 = RealSenseCamera({"serial":"427622270438","target_fps": 15}) 
+        camera3 = RealSenseCamera({"serial":"427622270277","target_fps": 15}) 
+        # camera4 = RealSenseCamera({"serial":"243122075207","target_fps": 30}) 
+
         
         devices = [l_arm, r_arm, vrsocket, camera1,camera2,camera3]
         
         @camera1.on("frame")
         def show_frame(frame):
+            print("camera1")
             dc.put_video_frame(frame,camera_id=0)
 
         @camera2.on("frame")
         def show_frame(frame):
+            print("camera2")
             dc.put_video_frame(frame,camera_id=1)
 
         @camera3.on("frame")
         def show_frame(frame):
+            print("camera3")
             dc.put_video_frame(frame,camera_id=2)
             
         
@@ -95,12 +100,13 @@ if __name__ == '__main__':
         camera1.start()
         camera2.start()
         camera3.start()
+        # camera4.start()
         l_arm.start()
         r_arm.start()
         vrsocket.start() #启动数据接收线程,理论要在注册回调函数之后,但在前面启动也不影响
         
         while(1):
-            connect_states = [device.get_conn_status() for device in devices]
+            connect_states = [device and device.get_conn_status() for device in devices]
             print(f"设备连接状态: {connect_states}")
             time.sleep(1)
     except Exception as e:

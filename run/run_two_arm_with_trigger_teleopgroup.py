@@ -15,8 +15,8 @@ if __name__ == "__main__":
         vr = VRSocket({"ip": "192.168.0.103", "port": 12345})
 
         cam1 = RealSenseCamera({"serial": "153122070447", "target_fps": 30})
-        cam2 = RealSenseCamera({"serial": "427622270438", "target_fps": 30})
-        cam3 = RealSenseCamera({"serial": "427622270277", "target_fps": 30})
+        cam2 = RealSenseCamera({"serial": "427622270438", "target_fps": 15})
+        cam3 = RealSenseCamera({"serial": "427622270277", "target_fps": 15})
 
         teleop_group = TwoArmWithTriggerTeleopGroup(
             [left_arm, right_arm, vr, cam1, cam2, cam3]
