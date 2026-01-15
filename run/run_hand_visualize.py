@@ -6,7 +6,7 @@ import time
 if __name__ == '__main__':
     try:
         visualizer = HandVisualizer()
-        vrsocket = VRSocket({"ip": '192.168.0.100', "port": 12345})
+        vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         
         devices = [vrsocket]
