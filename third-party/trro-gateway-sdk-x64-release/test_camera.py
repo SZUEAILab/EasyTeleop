@@ -6,7 +6,7 @@ print(sys.executable)  # 打印运行时的 Python 路径
 # import cv2
 
 # 尝试打开摄像头（索引 0 或 1）
-cap = cv2.VideoCapture(16)
+cap = cv2.VideoCapture(4)
 if not cap.isOpened():
     print("无法打开摄像头")
     exit()

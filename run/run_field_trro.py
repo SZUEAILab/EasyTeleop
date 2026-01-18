@@ -32,12 +32,12 @@ if __name__ == '__main__':
         # current_script_path = os.path.abspath(__file__)
         # current_script_dir = os.path.dirname(current_script_path)
 
-        # 构建 third-party 目录的路径（相对当前脚本目录：../third-party/）
+        # # 构建 third-party 目录的路径（相对当前脚本目录：../third-party/）
         # third_party_dir = os.path.join(current_script_dir, "../third-party/trro-gateway-sdk-x64-release/")
-        # 规范化路径（处理 ../ 等相对路径符号）
+        # # 规范化路径（处理 ../ 等相对路径符号）
         # third_party_dir = os.path.normpath(third_party_dir)
 
-        # 构建配置文件和库文件的相对路径
+        # # 构建配置文件和库文件的相对路径
         # CFG = os.path.join(third_party_dir, "config.json")
         # LIB = os.path.join(third_party_dir, "sdk_lib/libtrro_field.so")
         # ★★ 关键：创建 TRRO 现场端设备
