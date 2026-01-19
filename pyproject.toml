@@ -45,5 +45,5 @@ packages = { find = { where = ["src"], include = ["EasyTeleop*"] } }
 
 [tool.setuptools.package-data]
 EasyTeleop = [
-    "third_party/trro-gateway-sdk-x64-release/**",
+    "src/trro-gateway-sdk-x64-release/**",
 ]
