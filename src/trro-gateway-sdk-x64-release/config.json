@@ -3,7 +3,7 @@
 	"device_id": "arm",
 	"device_name": "arm",
 	"password": "Realmanarm123456",
-	"certificate": "./device.pem",
+	"certificate": "../trro_gateway_python/device.pem",
 	"audio_enable": 0,
 	"audio_receive": 1,
 	"device_streams": 1,
