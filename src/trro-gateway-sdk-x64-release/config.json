@@ -1,0 +1,34 @@
+{
+	"projectid": "y3uaslsp3y8tmokm",
+	"device_id": "arm",
+	"device_name": "arm",
+	"password": "Realmanarm123456",
+	"certificate": "./device.pem",
+	"audio_enable": 0,
+	"audio_receive": 1,
+	"device_streams": 1,
+	"streams_config": [
+		{
+			"protocol": "outside",
+			"camera": 4,
+			"width": 1280,
+			"height": 720,
+			"fps": 30,
+			"encode_width": 1280,
+			"encode_height": 720,
+			"bps": 500,
+			"encoder_type": 1,
+			"min_fps": 1,
+			"min_bps": 200,
+			"min_width": 1280,
+			"record_on": 0,
+			"always_push": 0,
+			"codec": 0
+		}
+
+	],
+	"cloud_mode": "public",
+	"sdk_mode": "server2",
+	"dc_compress": 1,
+	"log_enable": 2
+}

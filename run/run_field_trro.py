@@ -42,8 +42,8 @@ if __name__ == '__main__':
         # LIB = os.path.join(third_party_dir, "sdk_lib/libtrro_field.so")
         # ★★ 关键：创建 TRRO 现场端设备
         # 路径可不传，类里默认就是 third-party/trro-gateway-sdk-x64-release 下的 so/config.json
-        CFG = "/home/ym/code/bingyu/trro/EasyTeleop/third-party/trro-gateway-sdk-x64-release/config.json"
-        LIB = "/home/ym/code/bingyu/trro/EasyTeleop/third-party/trro-gateway-sdk-x64-release/sdk_lib/libtrro_field.so"
+        CFG = "./src/trro-gateway-sdk-x64-release/config.json"
+        LIB = "./src/trro-gateway-sdk-x64-release/sdk_lib/libtrro_field.so"
 
         field_vr = TrroFieldVR({
             "lib_path": LIB,

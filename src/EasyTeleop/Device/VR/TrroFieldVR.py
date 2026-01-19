@@ -26,6 +26,7 @@ import cv2  # 现场端采集用
 # import numpy as np  # 如需图像处理可启用
 
 from .BaseVR import BaseVR
+from .trro_sdk_paths import get_trro_default_paths
 
 # ========= 协议常量，保持与你 demo 一致 =========
 #FRAME_BYTES   = 1024
@@ -173,11 +174,11 @@ class TrroFieldVR(BaseVR):
         "send_hz": "int|optional: data send frequency, default=100",
     }
 
-    # 默认硬编码路径（按你要求的目录）
-    _DEFAULT_LIB_PATH   = os.path.normpath(os.path.join(os.path.dirname(__file__),
-                                 "../../third-party/trro-gateway-sdk-x64-release/sdk_lib/libtrro_field.so"))
-    _DEFAULT_CFG_PATH   = os.path.normpath(os.path.join(os.path.dirname(__file__),
-                                 "../../third-party/trro-gateway-sdk-x64-release/config.json"))
+    # Default paths are resolved from:
+    # - $EASYTELEOP_TRRO_SDK_DIR
+    # - EasyTeleop/third_party/trro-gateway-sdk-x64-release (packaged assets)
+    # - <repo>/third-party/trro-gateway-sdk-x64-release (dev layout)
+    _DEFAULT_LIB_PATH, _DEFAULT_CFG_PATH = get_trro_default_paths()
 
     def __init__(self, config=None):
         super().__init__(config)
