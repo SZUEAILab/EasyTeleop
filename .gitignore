@@ -27,3 +27,6 @@ datasets/*
 test/*
 
 .vscode/
+
+
+!third-party/**/*.so
