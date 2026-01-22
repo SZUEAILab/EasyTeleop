@@ -8,7 +8,7 @@ if __name__ == '__main__':
         start_time = 0
         package_count = 0
         
-        arm = RealManWithIK({"ip": "192.168.0.18", "port": 8080})
+        arm = RealManWithIK({"ip": "192.168.0.19", "port": 8080,"control_mode": 1})
         vrsocket = VRSocket({"ip": '192.168.0.103', "port": 12345})
         teleop = TeleopMiddleware()
         

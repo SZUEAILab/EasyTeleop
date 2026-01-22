@@ -6,3 +6,5 @@ include src/qp-tools/README.md
 
 # TRRO SDK (vendored runtime assets)
 recursive-include src/EasyTeleop/third_party/trro-gateway-sdk-x64-release *
+
+include LICENSE

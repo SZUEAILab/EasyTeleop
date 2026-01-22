@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  easyteleop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: easyteleop-dev:latest
+    working_dir: /workspace
+    command: sleep infinity
+    environment:
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - .:/workspace
+      - uv_cache:/root/.cache/uv
+      - pip_cache:/root/.cache/pip
+    ports:
+      - "8080:8080"
+      - "12345:12345"
+    # Uncomment if you need direct device access (e.g., RealSense/robot arms) on Linux hosts
+    # devices:
+    #   - "/dev:/dev"
+    # For Linux hosts needing zero-NAT networking, optionally enable:
+    # network_mode: "host"
+
+volumes:
+  uv_cache:
+  pip_cache:

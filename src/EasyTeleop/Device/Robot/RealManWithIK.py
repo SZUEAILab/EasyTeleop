@@ -39,8 +39,8 @@ class RealManWithIK(BaseRobot):
     RealMan机器人控制器，继承自Robot基类，实现具体控制逻辑。
     """
     # 定义需要的配置字段为静态字段
-    name = "睿尔曼R75b机械臂"
-    description = "用于控制RealMan机械臂的机器人控制器"
+    name = "睿尔曼R75b机械臂(IK)"
+    description = "用于控制RealMan机械臂的机器人控制器，自带IK解算"
     need_config = {
         "ip": {
             "type": "string",
@@ -52,12 +52,18 @@ class RealManWithIK(BaseRobot):
             "description": "睿尔曼机械臂端口号",
             "default": 8080
         },
+        "control_mode": {
+            "type": "integer",
+            "description": "0: 位姿相对，1: 位置相对姿态绝对，2: 位姿绝对",
+            "default": 0
+        },
     }
     
     def __init__(self, config: Dict[str, Any]):
         
         self.ip = None
         self.port = None
+        self.control_mode = 0
         
         super().__init__(config)
         
@@ -87,7 +93,6 @@ class RealManWithIK(BaseRobot):
             last_time = time.time()
             succ, arm_state = self.arm_controller.rm_get_current_arm_state()
             if not succ:
-                
                 self.current_pose_data = arm_state["pose"]
                 self.current_joint_data = arm_state["joint"]
                 self.emit("pose",self.current_pose_data)#调用回调函数
@@ -99,8 +104,8 @@ class RealManWithIK(BaseRobot):
             # 获取夹爪状态
             succ_gripper, gripper_state = self.arm_controller.rm_get_gripper_state()
             if not succ_gripper:
-                self.current_end_effector_data = gripper_state
-                self.emit("end_effector",self.current_end_effector_data)#调用回调函数
+                self.current_end_effector_data = gripper_state['actpos']
+                self.emit("end_effector",[self.current_end_effector_data])#调用回调函数
             else:
                 raise RuntimeError("Failed to get gripper state")
             # 帧率控制，而不是固定间隔
@@ -123,7 +128,7 @@ class RealManWithIK(BaseRobot):
             # 获取手臂状态
             succ, arm_state = self.arm_controller.rm_get_current_arm_state()
             # print(arm_state)
-            if not succ:
+            if not succ and arm_state["pose"] is not None and arm_state["joint"] is not None:
                 self.current_pose_data = arm_state["pose"]
                 self.current_joint_data = arm_state["joint"]
             else:
@@ -186,13 +191,21 @@ class RealManWithIK(BaseRobot):
         :return: 是否设置成功
         """
         # 检查必需的配置字段
-        for key in self.need_config:
-            if key not in config:
-                raise ValueError(f"缺少必需的配置字段: {key}")
+        config_with_default = dict(config)
+        for key, meta in self.need_config.items():
+            if key not in config_with_default:
+                if "default" in meta:
+                    config_with_default[key] = meta["default"]
+                else:
+                    raise ValueError(f"缺少必需的配置字段: {key}")
         
-        self.config = config
-        self.ip = config["ip"]
-        self.port = int(config["port"])
+        self.config = config_with_default
+        self.ip = config_with_default["ip"]
+        self.port = int(config_with_default["port"])
+        control_mode = int(config_with_default.get("control_mode", 0))
+        if control_mode not in (0, 1, 2):
+            raise ValueError("control_mode 仅支持 0、1、2")
+        self.control_mode = control_mode
         
         return True
     def get_pose_data(self):
@@ -231,7 +244,10 @@ class RealManWithIK(BaseRobot):
             print("[Control] Control stopped.")
     def _control_loop(self):
         """控制线程主循环"""
-        while self.control_thread_running:
+        while self.control_thread_running :
+            if self._conn_status != 1:
+                time.sleep(0.1)
+                continue
             control_start = time.time()
             # 处理位姿队列，只取最新的一帧数据
             pose_data = None
@@ -241,6 +257,9 @@ class RealManWithIK(BaseRobot):
             # 只处理最新的位姿数据
             if pose_data is not None:
                 if self.prev_tech_state is None:
+                    if self.get_pose_data() is None or self.get_joint_data() is None:
+                        print("等待机械臂状态数据...")
+                        continue
                     # 初始化状态
                     self.prev_tech_state = pose_data
                     self.arm_first_state = self.get_pose_data()
@@ -294,13 +313,34 @@ class RealManWithIK(BaseRobot):
         """欧拉角控制"""
         for i in range(6):
             self.delta[i] = tech_state[i] - self.prev_tech_state[i]
-        # self.prev_tech_state = tech_state.copy()
-        hand_x = self.arm_first_state[0] + self.delta[0]
-        hand_y = self.arm_first_state[1] + self.delta[1]
-        hand_z = self.arm_first_state[2] + self.delta[2]
-        hand_roll = self.arm_first_state[3] + self.delta[3]
-        hand_pitch = self.arm_first_state[4] + self.delta[4]
-        hand_yaw = self.arm_first_state[5] + self.delta[5]
+
+        hand_x = 0
+        hand_y = 0
+        hand_z = 0
+        hand_roll = 0
+        hand_pitch = 0
+        hand_yaw = 0
+        if self.control_mode == 0:
+            hand_x = self.arm_first_state[0] + self.delta[0]
+            hand_y = self.arm_first_state[1] + self.delta[1]
+            hand_z = self.arm_first_state[2] + self.delta[2]
+            hand_roll = self.arm_first_state[3] + self.delta[3]
+            hand_pitch = self.arm_first_state[4] + self.delta[4]
+            hand_yaw = self.arm_first_state[5] + self.delta[5]
+        elif self.control_mode == 1:
+            hand_x = self.arm_first_state[0] + self.delta[0]
+            hand_y = self.arm_first_state[1] + self.delta[1]
+            hand_z = self.arm_first_state[2] + self.delta[2]
+            hand_roll = tech_state[3]
+            hand_pitch = tech_state[4]
+            hand_yaw = tech_state[5]
+        elif self.control_mode == 2:
+            hand_x = tech_state[0]
+            hand_y = tech_state[1]
+            hand_z = tech_state[2]
+            hand_roll = tech_state[3]
+            hand_pitch = tech_state[4]
+            hand_yaw = tech_state[5]
 
         # x, y, z, roll, pitch, yaw = self.hand_to_base_transform(
         #     hand_x, hand_y, hand_z, hand_roll, hand_pitch, hand_yaw

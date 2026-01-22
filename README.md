@@ -126,6 +126,55 @@ uv build --wheel
 - [run_singel_arm_with_right_controller.py](run/run_singel_arm_with_right_controller.py): 单臂控制示例
 - [run_interpolation.py](run/run_interpolation.py): 插值算法演示
 
+### 数据后处理（PostProcess）
+
+数据采集脚本会把每次遥操作会话拆分保存在 `datasets/temp/<session_id>` 中（包含 `metadata.json`、`frames/`、`arm_#/` 等目录）。`run/run_postprocess.py` 会读取这些原始文件并生成可用于训练/回放的 HDF5 文件。
+
+1. 确保采集好的会话位于 `datasets/temp`（或者使用 `--temp_dir` 指定其他路径）。
+2. 执行后处理脚本：
+   ```bash
+   # 只处理指定会话
+   uv run run/run_postprocess.py --session demo_001
+
+   # 批量处理所有会话并指定输出目录
+   uv run run/run_postprocess.py --temp_dir datasets/temp --output_dir datasets/hdf5
+   ```
+3. 每个会话会生成一个同名的 `.hdf5` 文件（默认输出到 `datasets/hdf5`）。
+
+脚本支持以下常用参数：
+- `--temp_dir`：原始数据所在目录，默认为 `datasets/temp`
+- `--output_dir`：HDF5 输出目录，默认为 `datasets/hdf5`
+- `--session`：可以一次传入一个或多个会话 ID；不传则处理全部
+- `--pattern`：使用通配符过滤会话（例如 `demo_*`），可与 `--latest` 组合
+- `--latest`：只处理过滤结果中最近修改的一个会话
+- `--list`：仅列出筛选后的会话并退出
+- `--skip_existing`：跳过已经存在同名 `.hdf5` 的会话
+- `--dry_run`：仅打印会被处理的会话，不真正生成文件
+
+运行过程中会完成：
+- 读取 `frames/camera_0` 的时间戳并将其作为所有模态的主时间轴；
+- 对双臂的 `pose/joint/end_effector` CSV 数据自动推断维度并做线性插值；
+- 将缺失帧替换为 224×224 的黑色占位图，确保 HDF5 结构稳定；
+- 写入 `metadata`/`info` 分组并统计帧数、摄像头数等信息，便于下游检索。
+
+可以使用 `uv run run/view_hdf5.py --path datasets/hdf5/<session>.hdf5` 快速检查后处理结果和插值情况。更多流程细节、输入规范与排查技巧详见 [PostProcess 数据后处理指南](docs/postprocess.md)。
+
+### Docker 开发环境
+使用 Docker/Compose 可快速拉起开发容器（默认挂载本地代码，构建阶段已安装依赖并编译 qpSWIFT）。
+
+```bash
+# 构建镜像
+docker compose build
+
+# 进入开发容器（挂载当前仓库）
+docker compose run --rm easyteleop bash
+
+# 如需更新依赖或重新编译扩展，可在容器内执行：
+uv pip install --system -e .
+```
+
+如需直连硬件（RealSense/机械臂/VR 头显等），可根据宿主机情况在 `docker-compose.yml` 中开启 `devices` 映射或（Linux）启用 `network_mode: host`。
+
 ### 启动服务
 
 运行测试脚本:

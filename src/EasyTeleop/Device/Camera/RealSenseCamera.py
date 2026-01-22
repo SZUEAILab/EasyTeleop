@@ -21,7 +21,7 @@ class RealSenseCamera(BaseCamera):
         },
         "target_fps": {
             "type": "integer",
-            "description": "目标帧率,0为不控制",
+            "description": "目标帧率,0为不控制,默认30,但是注意D405摄像头同时使用两个需要设置为15",
             "default": 30
         },
     }
@@ -33,14 +33,19 @@ class RealSenseCamera(BaseCamera):
         """
         context = rs.context()
         devices = context.query_devices()
-        # 打印设备信息
+        found = []
+        # 打印设备信息并返回列表
         print("可用的设备:")
         for i, device in enumerate(devices):
-            print(f"{i}: {device.get_info(rs.camera_info.name)} - Serial: {device.get_info(rs.camera_info.serial_number)}")
+            name = device.get_info(rs.camera_info.name)
+            serial = device.get_info(rs.camera_info.serial_number)
+            print(f"{i}: {name} - Serial: {serial}")
+            found.append({"name": name, "serial": serial})
+        return found
     def __init__(self, config: Dict[str, Any] = None):
         
         self.camera_serial = None
-        self.pipeline = None    
+        self.pipeline = rs.pipeline() 
         self.rsconfig = rs.config()  
         # 子类字段初始化需要放在super()之前
         super().__init__(config)
@@ -74,12 +79,12 @@ class RealSenseCamera(BaseCamera):
         """连接RealSense摄像头"""
         try:
             print(f"camera_serial: {self.camera_serial}")
-            self.pipeline = rs.pipeline()
+            
             self.rsconfig.enable_device(self.camera_serial)
-            self.rsconfig.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
-            self.rsconfig.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
-            profile = self.pipeline.start(self.rsconfig)
-            # device = profile.get_device()
+            self.rsconfig.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, self.target_fps)
+            self.rsconfig.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, self.target_fps)
+            self.profile = self.pipeline.start(self.rsconfig)
+            # device = self.profile.get_device()
             # device.hardware_reset()
             print(f"connected successfully")
             return True
@@ -92,7 +97,6 @@ class RealSenseCamera(BaseCamera):
         try:
             if self.pipeline:
                 self.pipeline.stop()
-                self.pipeline = None
             print(f"disconnected successfully")
             return True
         except Exception as e:

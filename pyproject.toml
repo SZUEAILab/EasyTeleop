@@ -1,12 +1,12 @@
 [project]
 name = "EasyTeleop"
-version = "0.2.3"
+version = "0.2.5"
 authors = [                         # 作者信息（支持多人）
   { name = "Chain Pray", email = "qianpurui@gmail.com" },
 ]
 description = "Easy teleoperate tools for robotic devices control with VR headset"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
 classifiers = [
@@ -19,7 +19,6 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
 ]
 dependencies = [

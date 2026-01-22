@@ -361,7 +361,10 @@ class Revo2OnRealMan(BaseHand):
             print("[Control] Control stopped.")
 
     def _control_loop(self):
-        while self.control_thread_running:
+        while self.control_thread_running :
+            if self._conn_status != 1:
+                time.sleep(0.1)
+                continue
             latest_data = None
             # 获取最新的数据，但不移除队列中的元素
             if len(self.hand_queue) > 0:

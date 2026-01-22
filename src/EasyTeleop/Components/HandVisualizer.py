@@ -6,7 +6,7 @@ from queue import Queue
 import matplotlib
 import threading
 import time
-matplotlib.use('TkAgg')  # 使用TkAgg后端
+# matplotlib.use('TkAgg')  # 使用TkAgg后端
 
 class HandVisualizer:
     # OpenXR手部关节定义

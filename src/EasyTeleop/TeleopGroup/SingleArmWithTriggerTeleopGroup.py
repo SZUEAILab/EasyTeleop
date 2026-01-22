@@ -63,7 +63,9 @@ class SingleArmWithTriggerTeleopGroup(BaseTeleopGroup):
                 self.teleop.on("leftGripTurnUp",self.devices[0].stop_control)
                 self.teleop.on("leftTrigger",self.devices[0].add_end_effector_data)
                 self.teleop.on("leftPosRot",self.devices[0].add_pose_data)
-                self.devices[0].on("state", self.data_collect.put_robot_state)
+                self.devices[0].on("pose", self.data_collect.put_robot_pose)
+                self.devices[0].on("joint", self.data_collect.put_robot_joint)
+                self.devices[0].on("end_effector", self.data_collect.put_end_effector_state)
 
             self.devices[1].on("message",self.teleop.handle_socket_data)
 

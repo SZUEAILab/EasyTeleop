@@ -72,22 +72,26 @@ class TwoArmWithTriggerTeleopGroup(BaseTeleopGroup):
                 self.teleop.on("leftGripTurnUp",self.devices[0].stop_control)
                 self.teleop.on("leftTrigger",self.devices[0].add_end_effector_data)
                 self.teleop.on("leftPosRot",self.devices[0].add_pose_data)
-                self.devices[0].on("state", self.data_collect.put_robot_state)
+                self.devices[0].on("pose", lambda pose, arm_id=0: self.data_collect.put_robot_pose(pose, arm_id=arm_id))
+                self.devices[0].on("joint", lambda joint, arm_id=0: self.data_collect.put_robot_joint(joint, arm_id=arm_id))
+                self.devices[0].on("end_effector", lambda eff, arm_id=0: self.data_collect.put_end_effector_state(eff, arm_id=arm_id))
             if self.devices[1]:
                 self.teleop.on("rightGripTurnDown",self.devices[1].start_control)
                 self.teleop.on("rightGripTurnUp",self.devices[1].stop_control)
                 self.teleop.on("rightTrigger",self.devices[1].add_end_effector_data)
                 self.teleop.on("rightPosRot",self.devices[1].add_pose_data)
-                self.devices[1].on("state", self.data_collect.put_robot_state)
+                self.devices[1].on("pose", lambda pose, arm_id=1: self.data_collect.put_robot_pose(pose, arm_id=arm_id))
+                self.devices[1].on("joint", lambda joint, arm_id=1: self.data_collect.put_robot_joint(joint, arm_id=arm_id))
+                self.devices[1].on("end_effector", lambda eff, arm_id=1: self.data_collect.put_end_effector_state(eff, arm_id=arm_id))
 
             self.devices[2].on("message",self.teleop.handle_socket_data)
 
             if self.devices[3]:
-                self.devices[3].on("frame",self.data_collect.put_video_frame)
+                self.devices[3].on("frame",lambda frame, camera_id=0: self.data_collect.put_video_frame(frame, camera_id=camera_id))
             if self.devices[4]:
-                self.devices[4].on("frame",self.data_collect.put_video_frame)
+                self.devices[4].on("frame",lambda frame, camera_id=1: self.data_collect.put_video_frame(frame, camera_id=camera_id))
             if self.devices[5]:
-                self.devices[5].on("frame",self.data_collect.put_video_frame)
+                self.devices[5].on("frame",lambda frame, camera_id=2: self.data_collect.put_video_frame(frame, camera_id=camera_id))
             
             # 启动所有设备
             for device in self.devices:

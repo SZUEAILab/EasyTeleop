@@ -5,6 +5,7 @@ import os
 import csv
 import asyncio
 import cv2
+import json
 from typing import Callable
 
 class DataCollect:
@@ -14,16 +15,23 @@ class DataCollect:
         }
 
         self.video_queue = queue.Queue()
-        self.state_queue = queue.Queue()
+        self.pose_queue = queue.Queue()
+        self.joint_queue = queue.Queue()
+        self.end_effector_queue = queue.Queue()
         self.running = False
         self.save_dir = save_dir
         self.capture_state = 0  # 0: not capturing, 1: capturing
         self.session_timestamp = None
-        self.state_file = None
+        self.metadata = {}
+        self.pose_files = {}  # 为每个臂创建独立的文件
+        self.joint_files = {}
+        self.end_effector_files = {}
         self.video_dir = None
         os.makedirs(self.save_dir, exist_ok=True)
         self.video_consumer_thread = None
-        self.state_consumer_thread = None
+        self.pose_consumer_thread = None
+        self.joint_consumer_thread = None
+        self.end_effector_consumer_thread = None
 
     def on(self, event_name: str, callback: Callable = None) -> Callable:
         """
@@ -104,17 +112,29 @@ class DataCollect:
         """默认错误回调函数，打印错误信息"""
         print(f"设备{self.__class__.__name__}发生错误: {error_msg}")
 
-    def put_video_frame(self, frame, ts=None):
-        """向视频队列添加帧（frame为numpy数组），附带时间戳"""
+    def put_video_frame(self, frame, ts=None, camera_id=0):
+        """向视频队列添加帧（frame为numpy数组），附带时间戳和摄像头ID"""
         if ts is None:
             ts = time.time()
-        self.video_queue.put((ts, frame))
+        self.video_queue.put((ts, frame, camera_id))
 
-    def put_robot_state(self, state, ts=None):
-        """向机械臂状态队列添加状态（state为dict或list），附带时间戳"""
+    def put_robot_pose(self, pose_data, arm_id=0, ts=None):
+        """向机械臂位姿队列添加数据，附带时间戳和臂ID"""
         if ts is None:
             ts = time.time()
-        self.state_queue.put((ts, state))
+        self.pose_queue.put((ts, pose_data, arm_id))
+        
+    def put_robot_joint(self, joint_data, arm_id=0, ts=None):
+        """向机械臂关节队列添加数据，附带时间戳和臂ID"""
+        if ts is None:
+            ts = time.time()
+        self.joint_queue.put((ts, joint_data, arm_id))
+
+    def put_end_effector_state(self, end_effector_state, arm_id=0, ts=None):
+        """向夹爪状态队列添加状态，附带时间戳和臂ID"""
+        if ts is None:
+            ts = time.time()
+        self.end_effector_queue.put((ts, end_effector_state, arm_id))
 
     def set_capture_state(self, state) -> bool:
         """设置采集状态"""
@@ -132,6 +152,8 @@ class DataCollect:
             self._start_new_session()
             self.capture_state = 1
         else:
+            # 结束会话并保存元数据
+            self.finish_session()
             self.capture_state = 0
         self.emit("status_change", self.capture_state)
 
@@ -140,56 +162,145 @@ class DataCollect:
         self.session_timestamp = time.strftime("%Y%m%d_%H%M%S")
         session_dir = os.path.join(self.save_dir, self.session_timestamp)
         self.video_dir = os.path.join(session_dir, "frames")
-        self.state_file = os.path.join(session_dir, "states.csv")
         
+        # 为每个臂创建独立的数据文件
+        for arm_id in [0, 1]:  # 支持两个臂
+            arm_dir = os.path.join(session_dir, f"arm_{arm_id}")
+            os.makedirs(arm_dir, exist_ok=True)
+            
+            self.pose_files[arm_id] = os.path.join(arm_dir, "poses.csv")
+            self.joint_files[arm_id] = os.path.join(arm_dir, "joints.csv")
+            self.end_effector_files[arm_id] = os.path.join(arm_dir, "end_effector.csv")
+            
+            # Create CSV files with headers
+            with open(self.pose_files[arm_id], "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "index", "value"])
+                
+            with open(self.joint_files[arm_id], "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "index", "value"])
+                
+            with open(self.end_effector_files[arm_id], "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["timestamp", "index", "value"])
+
         os.makedirs(self.video_dir, exist_ok=True)
         
-        # Create CSV file with header
-        with open(self.state_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.writer(f)
-            writer.writerow(["timestamp", "state"])
+    def register_device(self, device_name, device_info):
+        """注册设备信息到元数据中"""
+        self.metadata["devices"][device_name] = device_info
+
+    def finish_session(self):
+        """结束当前会话，保存元数据"""
+        if self.session_timestamp:
+            self.metadata["end_time"] = time.time()
+            session_dir = os.path.join(self.save_dir, self.session_timestamp)
+            metadata_file = os.path.join(session_dir, "metadata.json")
+            
+            with open(metadata_file, "w", encoding="utf-8") as f:
+                json.dump(self.metadata, f, indent=2, ensure_ascii=False)
 
     def start(self):
         """启动消费线程"""
         if not self.running:
             self.running = True
-            # 启动两个独立的消费线程
+            # 启动四个独立的消费线程
             self.video_consumer_thread = threading.Thread(target=self._consume_video, daemon=True)
-            self.state_consumer_thread = threading.Thread(target=self._consume_state, daemon=True)
+            self.pose_consumer_thread = threading.Thread(target=self._consume_pose, daemon=True)
+            self.joint_consumer_thread = threading.Thread(target=self._consume_joint, daemon=True)
+            self.end_effector_consumer_thread = threading.Thread(target=self._consume_end_effector, daemon=True)
             self.video_consumer_thread.start()
-            self.state_consumer_thread.start()
+            self.pose_consumer_thread.start()
+            self.joint_consumer_thread.start()
+            self.end_effector_consumer_thread.start()
 
     def stop(self):
         """停止消费线程"""
         self.running = False
         if self.video_consumer_thread:
             self.video_consumer_thread.join()
-        if self.state_consumer_thread:
-            self.state_consumer_thread.join()
+        if self.pose_consumer_thread:
+            self.pose_consumer_thread.join()
+        if self.joint_consumer_thread:
+            self.joint_consumer_thread.join()
+        if self.end_effector_consumer_thread:
+            self.end_effector_consumer_thread.join()
+        
 
     def _consume_video(self):
         """消费视频帧线程：不断取出视频队列头部数据并存储到本地"""
         while self.running:
             try:
-                ts, frame = self.video_queue.get(timeout=0.1)
+                ts, frame, camera_id = self.video_queue.get(timeout=0.1)
                 # Check capture state before saving
                 if self.capture_state == 1 and self.video_dir:
-                    filename = os.path.join(self.video_dir, f"frame_{ts:.3f}.jpg")
+                    # 为每个摄像头创建独立的子目录
+                    camera_dir = os.path.join(self.video_dir, f"camera_{camera_id}")
+                    os.makedirs(camera_dir, exist_ok=True)
+                    # 保存为PNG格式以保留原始数据
+                    filename = os.path.join(camera_dir, f"frame_{ts:.3f}.png")
                     cv2.imwrite(filename, frame)
                 self.video_queue.task_done()
             except queue.Empty:
                 pass
 
-    def _consume_state(self):
-        """消费机械臂状态线程：不断取出状态队列头部数据并存储到本地"""
+    def _consume_pose(self):
+        """消费机械臂位姿线程：不断取出位姿队列头部数据并存储到本地"""
         while self.running:
             try:
-                ts, state = self.state_queue.get(timeout=0.1)
+                ts, pose_data, arm_id = self.pose_queue.get(timeout=0.1)
                 # Check capture state before saving
-                if self.capture_state == 1 and self.state_file:
-                    with open(self.state_file, "a", newline="", encoding="utf-8") as f:
-                        writer = csv.writer(f)
-                        writer.writerow([f"{ts:.3f}", str(state)])
-                self.state_queue.task_done()
+                if self.capture_state == 1 and arm_id in self.pose_files:
+                    # pose_data是位姿数组
+                    if isinstance(pose_data, (list, tuple)):
+                        with open(self.pose_files[arm_id], "a", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f)
+                            for i, value in enumerate(pose_data):
+                                writer.writerow([f"{ts:.3f}", i, value])
+                        
+                self.pose_queue.task_done()
+            except queue.Empty:
+                pass
+
+    def _consume_joint(self):
+        """消费机械臂关节线程：不断取出关节队列头部数据并存储到本地"""
+        while self.running:
+            try:
+                ts, joint_data, arm_id = self.joint_queue.get(timeout=0.1)
+                # Check capture state before saving
+                if self.capture_state == 1 and arm_id in self.joint_files:
+                    # joint_data是关节数组
+                    if isinstance(joint_data, (list, tuple)):
+                        with open(self.joint_files[arm_id], "a", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f)
+                            for i, value in enumerate(joint_data):
+                                writer.writerow([f"{ts:.3f}", i, value])
+                        
+                self.joint_queue.task_done()
+            except queue.Empty:
+                pass
+
+    def _consume_end_effector(self):
+        """消费夹爪状态线程：不断取出夹爪队列头部数据并存储到本地"""
+        while self.running:
+            try:
+                ts, end_effector, arm_id = self.end_effector_queue.get(timeout=0.1)
+                # Check capture state before saving
+                if self.capture_state == 1 and arm_id in self.end_effector_files:
+                    # 写入夹爪数据到end_effector.csv
+                    if isinstance(end_effector, (list, tuple, dict)):
+                        with open(self.end_effector_files[arm_id], "a", newline="", encoding="utf-8") as f:
+                            writer = csv.writer(f)
+                            if isinstance(end_effector, dict):
+                                # 如果是字典，遍历键值对
+                                for key, value in end_effector.items():
+                                    writer.writerow([f"{ts:.3f}", key, value])
+                            else:
+                                # 如果是列表或元组，遍历索引和值
+                                for i, value in enumerate(end_effector):
+                                    writer.writerow([f"{ts:.3f}", i, value])
+                        
+                self.end_effector_queue.task_done()
             except queue.Empty:
                 pass
