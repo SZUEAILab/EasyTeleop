@@ -57,7 +57,13 @@ if __name__ == '__main__':
         # ===== 事件对接（保持你原来的逻辑不变）=====
         
 
-        l_arm.on("state", dc.put_robot_state)
+        l_arm.on("pose", lambda pose, arm_id=0: dc.put_robot_pose(pose, arm_id=arm_id))
+        l_arm.on("joint", lambda joint, arm_id=0: dc.put_robot_joint(joint, arm_id=arm_id))
+        l_arm.on("end_effector", lambda eff, arm_id=0: dc.put_end_effector_state(eff, arm_id=arm_id))
+
+        r_arm.on("pose", lambda pose, arm_id=1: dc.put_robot_pose(pose, arm_id=arm_id))
+        r_arm.on("joint", lambda joint, arm_id=1: dc.put_robot_joint(joint, arm_id=arm_id))
+        r_arm.on("end_effector", lambda eff, arm_id=1: dc.put_end_effector_state(eff, arm_id=arm_id))
 
         teleop.on("leftGripTurnDown", l_arm.start_control)
         teleop.on("leftGripTurnUp",   l_arm.stop_control)
@@ -93,8 +99,8 @@ if __name__ == '__main__':
         # dc.start()
         # camera1.start()  # 如果你要同时跑本地相机数据，就启用
 
-        l_arm.start()
-        r_arm.start()
+        # l_arm.start()
+        # r_arm.start()
 
         # ★ 启动 TRRO 现场端设备（内部会自动 init/start SDK、起多路视频线程、起数据/统计线程）
         field_vr.start()
