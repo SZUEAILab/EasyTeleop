@@ -23,15 +23,16 @@ classifiers = [
 ]
 dependencies = [
     "aiortc>=1.13.0",
-    "av>=14.4.0",
-    "h5py>=3.15.1",
     "matplotlib>=3.10.7",
+    "h5py>=3.15.1",
     "numpy>=2.2.6",
     "opencv-python>=4.11.0.86",
-    "pyrealsense2>=2.56",
+    "protobuf==4.25.3",
+    "pyrealsense2>=2.56.5.9235",
     "robotic-arm>=1.1.1",
     "scipy>=1.15.3",
     "websockets>=15.0.1",
+    "zstandard>=0.25.0",
 ]
 
 [build-system]
@@ -41,3 +42,8 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 package-dir = {"" = "src"}
 packages = { find = { where = ["src"], include = ["EasyTeleop*"] } }
+
+[tool.setuptools.package-data]
+EasyTeleop = [
+    "src/trro-gateway-sdk-x64-release/**",
+]
