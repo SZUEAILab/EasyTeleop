@@ -28,7 +28,6 @@ class TestRobot(BaseRobot):
     }
 
     def __init__(self, config=None):
-        super().__init__(config)
         self.fps = 30
         self.dof = 7
         self.min_interval = 1.0 / self.fps if self.fps > 0 else 0.1
@@ -44,6 +43,9 @@ class TestRobot(BaseRobot):
         self._control_thread = None
         self._control_thread_running = False
         self._control_lock = threading.Lock()
+
+        # 先初始化默认值，再让基类处理配置（set_config 会覆盖默认）
+        super().__init__(config)
 
     def set_config(self, config):
         super().set_config(config)
