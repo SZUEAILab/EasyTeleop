@@ -133,3 +133,10 @@ class VRSocket(BaseVR):
         self.port = int(config["port"])
         
         return True
+
+    def _send_feedback(self, packet):
+        """具体的反馈发送实现"""
+        if self.sock is None or self.get_conn_status() != 1:
+            raise ConnectionError("VR Socket 未连接")
+        payload = json.dumps(packet, ensure_ascii=False) + "\n"
+        self.sock.sendall(payload.encode("utf-8"))

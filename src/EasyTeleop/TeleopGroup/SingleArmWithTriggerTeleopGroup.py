@@ -56,18 +56,35 @@ class SingleArmWithTriggerTeleopGroup(BaseTeleopGroup):
             # 注册数据采集状态变化回调
             # self.data_collect.on("status_change",None)
             print(f"当前遥操组设备: {self.devices}")
+
+            robot = self.devices[0]
+            vr_device = self.devices[1]
             
             # 注册回调函数
-            if self.devices[0]:
-                self.teleop.on("leftGripTurnDown",self.devices[0].start_control)
-                self.teleop.on("leftGripTurnUp",self.devices[0].stop_control)
-                self.teleop.on("leftTrigger",self.devices[0].add_end_effector_data)
-                self.teleop.on("leftPosRot",self.devices[0].add_pose_data)
-                self.devices[0].on("pose", self.data_collect.put_robot_pose)
-                self.devices[0].on("joint", self.data_collect.put_robot_joint)
-                self.devices[0].on("end_effector", self.data_collect.put_end_effector_state)
+            if vr_device:
+                    vr_device.on("message",self.teleop.handle_socket_data)
+                    self.robot_feedback_packer.on("packet", vr_device.add_feedback_data)
 
-            self.devices[1].on("message",self.teleop.handle_socket_data)
+            if robot:
+                self.teleop.on("leftGripTurnDown", robot.start_control)
+                self.teleop.on("leftGripTurnUp", robot.stop_control)
+                self.teleop.on("leftTrigger", robot.add_end_effector_data)
+                self.teleop.on("leftPosRot", robot.add_pose_data)
+
+                @robot.on("pose")
+                def handle_pose(pose, arm_id=0):
+                    self.data_collect.put_robot_pose(pose, arm_id=arm_id)
+                    self.robot_feedback_packer.add_feedback(robot, arm_id=arm_id, pose=pose)
+
+                @robot.on("joint")
+                def handle_joint(joint, arm_id=0):
+                    self.data_collect.put_robot_joint(joint, arm_id=arm_id)
+                    self.robot_feedback_packer.add_feedback(robot, arm_id=arm_id, joints=joint)
+
+                @robot.on("end_effector")
+                def handle_end_effector(eff, arm_id=0):
+                    self.data_collect.put_end_effector_state(eff, arm_id=arm_id)
+                    self.robot_feedback_packer.add_feedback(robot, arm_id=arm_id, end_effector=eff)
 
             if self.devices[2]:
                 self.devices[2].on("frame",self.data_collect.put_video_frame)

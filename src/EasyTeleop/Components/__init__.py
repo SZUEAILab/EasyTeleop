@@ -6,6 +6,8 @@ from .DataCollect import DataCollect
 from .Interpolation import Interpolation
 from .WebRTC import *
 from .StreamTracker import *
+from .RobotFeedbackPacker import RobotFeedbackPacker
+
 __all__ = [
     'Visualizer',
     'HandVisualizer',
