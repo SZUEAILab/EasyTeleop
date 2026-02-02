@@ -18,7 +18,7 @@ class VRSocket(BaseVR):
             "description": "服务器IP地址"
         },
         "port": {
-            "type": "integer",
+            "type": "number",
             "description": "服务器端口号",
             "default": 12345
         }

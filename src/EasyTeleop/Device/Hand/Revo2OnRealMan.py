@@ -16,17 +16,17 @@ class Revo2OnRealMan(BaseHand):
             "default": "192.168.1.18"
         },
         "port": {
-            "type": "integer",
+            "type": "number",
             "description": "睿尔曼机械臂端口号",
             "default": 8080
         },
         "baudrate":{
-            "type": "int",
+            "type": "number",
             "description": "Modbus串口波特率",
             "default": 460800
         },
         "address":{
-            "type": "int",
+            "type": "number",
             "description": "Revo2机械手Modbus设备地址,左手126，右手127",
             "default": 126
         },

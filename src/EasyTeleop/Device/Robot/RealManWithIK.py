@@ -48,12 +48,12 @@ class RealManWithIK(BaseRobot):
             "default": "192.168.1.18"
         },
         "port": {
-            "type": "integer",
+            "type": "number",
             "description": "睿尔曼机械臂端口号",
             "default": 8080
         },
         "control_mode": {
-            "type": "integer",
+            "type": "number",
             "description": "0: 位姿相对，1: 位置相对姿态绝对，2: 位姿绝对",
             "default": 0
         },

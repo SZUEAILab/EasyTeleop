@@ -9,7 +9,7 @@ class TestCamera(BaseCamera):
     need_config = {
         "fps": {
             "description": "帧率",
-            "type": "int"
+            "type": "number"
         }
     }
 

@@ -10,7 +10,7 @@ class TestVR(BaseVR):
     need_config = {
         "fps": {
             "description": "帧率",
-            "type": "int"
+            "type": "number"
         }
     }
 
