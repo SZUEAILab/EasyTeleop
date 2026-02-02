@@ -17,12 +17,12 @@ class TestRobot(BaseRobot):
     need_config = {
         "fps": {
             "description": "状态更新帧率",
-            "type": "int",
+            "type": "number",
             "default": 30,
         },
         "dof": {
             "description": "关节自由度数量",
-            "type": "int",
+            "type": "number",
             "default": 7,
         },
     }
