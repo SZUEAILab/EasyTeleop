@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional, Tuple
 import xml.etree.ElementTree as ET
 
 import numpy as np
+from contextlib import nullcontext
 
 from .BaseRobot import BaseRobot
 
@@ -34,7 +35,7 @@ class VirtualRobot(BaseRobot):
         },
         "fps": {
             "description": "反馈帧率",
-            "type": "int",
+            "type": "number",
             "default": 60,
         },
         "enable_gravity": {
@@ -49,19 +50,25 @@ class VirtualRobot(BaseRobot):
         },
         "control_mode": {
             "description": "0: 位姿相对；1: 位置相对+姿态绝对；2: 位姿绝对",
-            "type": "int",
+            "type": "number",
             "default": 0,
         },
         "dof": {
             "description": "关节自由度数量",
-            "type": "int",
+            "type": "number",
             "default": 7,
         },
         "end_effector_site": {
-            "description": "末端位姿读取的 site 名称（可选）",
+            "description": "末端位姿读取的 site 名称(可选)",
             "type": "string",
             "default": "",
         },
+        "tool_frame_rpy": {
+            "description": "末端工具坐标系基础旋转 (roll,pitch,yaw, 弧度)",
+            "type": "list",
+            "default": [0.0, 0.0, 0.0],
+        },
+
     }
 
     def __init__(self, config: Dict[str, Any]):
@@ -89,7 +96,19 @@ class VirtualRobot(BaseRobot):
         self._control_lock = threading.Lock()
         self._target_pose: Optional[list] = None
         self._target_end_effector: Optional[float] = None
+        self._tool_frame_R = np.eye(3, dtype=float)
         super().__init__(config)
+
+    def _mj_lock(self):
+        """
+        MuJoCo uses a single stack per mjData, which is not thread-safe.
+        The built-in viewer exposes a lock; when GUI is enabled we guard
+        every MuJoCo call with it to avoid concurrent access errors such as
+        `mj_copyDataVisual: attempting to copy mjData while stack is in use`.
+        """
+        if self._viewer is not None and hasattr(self._viewer, "lock"):
+            return self._viewer.lock()
+        return nullcontext()
 
     def set_config(self, config: Dict[str, Any]) -> bool:
         # 先补齐默认值再调用基类校验，避免缺少 dof/fps 时报必需字段缺失
@@ -113,12 +132,21 @@ class VirtualRobot(BaseRobot):
         self.dof = int(merged.get("dof", self.dof))
         self.min_interval = 1.0 / self.fps if self.fps > 0 else 0.01
         self.end_effector_site = merged.get("end_effector_site", "") or ""
+        tool_rpy = merged.get("tool_frame_rpy", [0.0, 0.0, 0.0])
+        if not isinstance(tool_rpy, (list, tuple)) or len(tool_rpy) < 3:
+            raise ValueError("tool_frame_rpy 需要为 [roll,pitch,yaw] (弧度)")
+        self._tool_frame_R = self._rpy_to_matrix(float(tool_rpy[0]), float(tool_rpy[1]), float(tool_rpy[2]))
         self._controlled_dofs = self.dof
         self._joints = [0.0] * self.dof
         return True
 
     def _connect_device(self) -> bool:
-        """加载 MuJoCo 模型"""
+        """
+MuJoCo uses a single stack per mjData, which is not thread-safe.
+The built-in viewer exposes a lock; when GUI is enabled we guard
+every MuJoCo call with it to avoid concurrent access errors such as
+`mj_copyDataVisual: attempting to copy mjData while stack is in use`.
+"""
         try:
             import mujoco
         except ImportError as e:
@@ -168,11 +196,21 @@ class VirtualRobot(BaseRobot):
         last_time = time.time()
         self._time_counter += 1
 
-        with self._control_lock:
-            self.mj_step(self.model, self.data)
-            joints = self.data.qpos[: self._controlled_dofs].tolist()
-            pose, _ = self._get_end_effector_pose(return_mat=True, lock_already_held=True)
-            ee_state = self._get_gripper_state(lock_already_held=True)
+        with self._mj_lock():
+            with self._control_lock:
+                self.mj_step(self.model, self.data)
+                joints = self.data.qpos[: self._controlled_dofs].tolist()
+                pose, ee_mat = self._get_end_effector_pose(return_mat=True, lock_already_held=True)
+                ee_state = self._get_gripper_state(lock_already_held=True)
+            if self._viewer is not None and self._viewer.user_scn is not None:
+                try:
+                    scn = self._viewer.user_scn
+                    scn.ngeom = 0
+                    self._add_axes_to_scene(scn, np.zeros(3, dtype=float), np.eye(3, dtype=float), axis_len=0.3)
+                    if pose is not None and ee_mat is not None:
+                        self._add_axes_to_scene(scn, np.array(pose[:3], dtype=float), ee_mat)
+                except Exception:
+                    pass
 
         if joints:
             self.current_joint_data = joints
@@ -188,7 +226,7 @@ class VirtualRobot(BaseRobot):
 
         if self._viewer is not None:
             try:
-                self._viewer.sync()
+                self._viewer.sync()  # viewer handles its own locking
             except Exception:
                 pass
 
@@ -229,7 +267,6 @@ class VirtualRobot(BaseRobot):
         rpy = self._mat_to_rpy(mat)
         pose = [float(pos[0]), float(pos[1]), float(pos[2]), *rpy]
         return (pose, mat) if return_mat else (pose, None)
-
     def _mat_to_rpy(self, mat: np.ndarray) -> list:
         """旋转矩阵转 RPY"""
         sy = math.sqrt(mat[0, 0] * mat[0, 0] + mat[1, 0] * mat[1, 0])
@@ -243,6 +280,51 @@ class VirtualRobot(BaseRobot):
             pitch = math.atan2(-mat[2, 0], sy)
             yaw = 0
         return [roll, pitch, yaw]
+
+    def _apply_tool_frame_rotation(self, pose: list) -> list:
+        """Left-multiply tool frame rotation onto desired end-effector orientation."""
+        if pose is None or len(pose) < 6:
+            return pose
+        pos = np.array(pose[:3], dtype=float)
+        rpy = pose[3:6]
+        r_desired = self._rpy_to_matrix(*rpy)
+        r_mapped = r_desired @ self._tool_frame_R
+        rpy_mapped = self._mat_to_rpy(r_mapped)
+        return [float(pos[0]), float(pos[1]), float(pos[2]), *rpy_mapped]
+    def _add_axes_to_scene(self, scn, origin: np.ndarray, mat: np.ndarray, axis_len: float = 0.1):
+        if scn is None or self.mujoco is None:
+            return
+        colors = [
+            np.array([1.0, 0.0, 0.0, 1.0], dtype=np.float32),
+            np.array([0.0, 1.0, 0.0, 1.0], dtype=np.float32),
+            np.array([0.0, 0.0, 1.0, 1.0], dtype=np.float32),
+        ]
+        for axis in range(3):
+            if scn.ngeom >= scn.maxgeom:
+                return
+            geom = scn.geoms[scn.ngeom]
+            size = np.array([0.003, axis_len, 0.0], dtype=float)
+            pos = np.zeros(3, dtype=float)
+            m = np.eye(3, dtype=float).reshape(9)
+            self.mujoco.mjv_initGeom(
+                geom,
+                self.mujoco.mjtGeom.mjGEOM_ARROW,
+                size,
+                pos,
+                m,
+                colors[axis],
+            )
+            axis_dir = mat[:, axis]
+            to = origin + axis_dir * axis_len
+            self.mujoco.mjv_connector(
+                geom,
+                self.mujoco.mjtGeom.mjGEOM_ARROW,
+                0.003,
+                origin,
+                to,
+            )
+            scn.ngeom += 1
+
 
     def _rpy_to_matrix(self, roll: float, pitch: float, yaw: float) -> np.ndarray:
         cr, sr = math.cos(roll), math.sin(roll)
@@ -359,48 +441,49 @@ class VirtualRobot(BaseRobot):
         if self.model is None or self.data is None or self.mujoco is None:
             return
 
-        with self._control_lock:
-            if len(target_pose) == self.model.nq:
-                self.data.qpos[: self.model.nq] = np.array(target_pose[: self.model.nq], dtype=float)
+        with self._mj_lock():
+            with self._control_lock:
+                if len(target_pose) == self.model.nq:
+                    self.data.qpos[: self.model.nq] = np.array(target_pose[: self.model.nq], dtype=float)
+                    self.data.qvel[:] = 0
+                    self.mj_forward(self.model, self.data)
+                    return
+
+                if len(target_pose) < 6:
+                    return
+
+                target_pos = np.array(target_pose[:3], dtype=float)
+                target_mat = self._rpy_to_matrix(*target_pose[3:6])
+
+                current_pose, current_mat = self._get_end_effector_pose(return_mat=True, lock_already_held=True)
+                if current_pose is None or current_mat is None:
+                    return
+
+                pos_err = target_pos - np.array(current_pose[:3])
+                rot_err = self._rotation_error(current_mat, target_mat)
+                err = np.concatenate((pos_err, rot_err))
+
+                jac_pos = np.zeros((3, self.model.nv))
+                jac_rot = np.zeros((3, self.model.nv))
+                if self._ee_site_id is not None:
+                    self.mujoco.mj_jacSite(self.model, self.data, jac_pos, jac_rot, self._ee_site_id)
+                else:
+                    body_id = self._ee_body_id if self._ee_body_id is not None else self.model.nbody - 1
+                    self.mujoco.mj_jacBody(self.model, self.data, jac_pos, jac_rot, body_id)
+                jac = np.vstack((jac_pos, jac_rot))[:, : self._controlled_dofs]
+
+                if jac.size == 0:
+                    return
+
+                # Damped least-squares step for a small IK update
+                lam = 1e-3
+                jjt = jac @ jac.T + lam * np.eye(6)
+                dq = jac.T @ np.linalg.solve(jjt, err)
+                dq = np.clip(dq, -0.05, 0.05)
+
+                self.data.qpos[: self._controlled_dofs] += dq
                 self.data.qvel[:] = 0
                 self.mj_forward(self.model, self.data)
-                return
-
-            if len(target_pose) < 6:
-                return
-
-            target_pos = np.array(target_pose[:3], dtype=float)
-            target_mat = self._rpy_to_matrix(*target_pose[3:6])
-
-            current_pose, current_mat = self._get_end_effector_pose(return_mat=True, lock_already_held=True)
-            if current_pose is None or current_mat is None:
-                return
-
-            pos_err = target_pos - np.array(current_pose[:3])
-            rot_err = self._rotation_error(current_mat, target_mat)
-            err = np.concatenate((pos_err, rot_err))
-
-            jac_pos = np.zeros((3, self.model.nv))
-            jac_rot = np.zeros((3, self.model.nv))
-            if self._ee_site_id is not None:
-                self.mujoco.mj_jacSite(self.model, self.data, jac_pos, jac_rot, self._ee_site_id)
-            else:
-                body_id = self._ee_body_id if self._ee_body_id is not None else self.model.nbody - 1
-                self.mujoco.mj_jacBody(self.model, self.data, jac_pos, jac_rot, body_id)
-            jac = np.vstack((jac_pos, jac_rot))[:, : self._controlled_dofs]
-
-            if jac.size == 0:
-                return
-
-            # 阻尼最小二乘求解关节增量
-            lam = 1e-3
-            jjt = jac @ jac.T + lam * np.eye(6)
-            dq = jac.T @ np.linalg.solve(jjt, err)
-            dq = np.clip(dq, -0.05, 0.05)
-
-            self.data.qpos[: self._controlled_dofs] += dq
-            self.data.qvel[:] = 0
-            self.mj_forward(self.model, self.data)
 
     def _resolve_control_pose(self, pose_data):
         if pose_data is None:
@@ -408,7 +491,7 @@ class VirtualRobot(BaseRobot):
         if not isinstance(pose_data, (list, tuple)) or len(pose_data) < 6:
             return pose_data
 
-        tech_state = list(pose_data[:6])
+        tech_state = self._apply_tool_frame_rotation(list(pose_data[:6]))
         if self.control_mode == 2:
             return tech_state
 
@@ -447,12 +530,13 @@ class VirtualRobot(BaseRobot):
         if self.model is None or self.data is None or self.model.nu == 0:
             return
 
-        with self._control_lock:
-            try:
-                val = float(ee_cmd[0]) if isinstance(ee_cmd, (list, tuple)) else float(ee_cmd)
-                self.data.ctrl[0] = val
-            except Exception:
-                self.data.ctrl[0] = 0.0
+        with self._mj_lock():
+            with self._control_lock:
+                try:
+                    val = float(ee_cmd[0]) if isinstance(ee_cmd, (list, tuple)) else float(ee_cmd)
+                    self.data.ctrl[0] = val
+                except Exception:
+                    self.data.ctrl[0] = 0.0
 
     def _resolve_end_effector_refs(self) -> Tuple[Optional[int], Optional[int]]:
         """根据配置/模型推断末端 site 与 body"""

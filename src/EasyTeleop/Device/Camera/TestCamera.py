@@ -15,6 +15,8 @@ class TestCamera(BaseCamera):
 
     def __init__(self, config=None):
         self._pulse_state = False  # 用于生成脉冲图片
+        self._frame_index = 0
+        self._grid = None
         super().__init__(config)
 
     def set_config(self, config):
@@ -52,8 +54,30 @@ class TestCamera(BaseCamera):
         except Exception as e:
             self.emit("error", str(e))
     def get_frames(self) -> np.ndarray:
-        """获取一帧图片"""
-        self._pulse_state = not self._pulse_state
-        color = 255 if self._pulse_state else 0
-        frame = np.full((720, 1080, 3), color, dtype=np.uint8)
-        return frame
+        """获取一帧图片?"""
+        height, width = 720, 1080
+        if self._grid is None:
+            xs = np.linspace(0.0, 1.0, width, dtype=np.float32)
+            ys = np.linspace(0.0, 1.0, height, dtype=np.float32)
+            self._grid = np.meshgrid(xs, ys)
+
+        x, y = self._grid
+        t = self._frame_index / max(self.fps, 1)
+        self._frame_index += 1
+
+        # Moving gradient background.
+        r = (np.sin(2.0 * np.pi * (x + t * 0.20)) + 1.0) * 0.5
+        g = (np.sin(2.0 * np.pi * (y + t * 0.15)) + 1.0) * 0.5
+        b = (np.sin(2.0 * np.pi * (x + y + t * 0.10)) + 1.0) * 0.5
+
+        frame = np.stack([r, g, b], axis=-1)
+
+        # Animated circle overlay.
+        cx = 0.5 + 0.25 * np.sin(2.0 * np.pi * t * 0.40)
+        cy = 0.5 + 0.20 * np.cos(2.0 * np.pi * t * 0.35)
+        radius = 0.12 + 0.02 * np.sin(2.0 * np.pi * t * 0.90)
+        dist = np.sqrt((x - cx) ** 2 + (y - cy) ** 2)
+        mask = dist < radius
+        frame[mask] = np.array([1.0, 0.7, 0.2], dtype=np.float32)
+
+        return (frame * 255.0).astype(np.uint8)
