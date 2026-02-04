@@ -422,9 +422,12 @@ class TrroFieldVR(BaseVR):
         self._start_workers()
         self._start_cameras_from_config()
 
+        self.start_feedback_loop()
+
         return True
 
     def _disconnect_device(self) -> bool:
+        self.stop_feedback_loop()
         # 停数据线程
         self._stop_evt.set()
         for t in self._workers:
