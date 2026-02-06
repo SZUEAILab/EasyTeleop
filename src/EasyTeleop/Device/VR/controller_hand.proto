@@ -1,0 +1,121 @@
+syntax = "proto3";
+package collection;
+
+// ========= 基础向量/四元数 =========
+
+message Vector2 {
+  float x = 1;
+  float y = 2;
+}
+
+message Vector3 {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+}
+
+message Quaternion {
+  float x = 1;
+  float y = 2;
+  float z = 3;
+  float w = 4;
+}
+
+// ========= Controller 部分：保留原样 =========
+
+message ControllerInput {
+  Vector3    leftPos             = 1;
+  Vector3    leftRot             = 2;
+  Quaternion leftQuat            = 3;
+  float      leftTrigger         = 4;
+  bool       buttonX             = 5;
+  bool       buttonXTurnDown     = 6;
+  bool       buttonXTurnUp       = 7;
+  bool       buttonY             = 8;
+  bool       buttonYTurnDown     = 9;
+  bool       buttonYTurnUp       = 10;
+  bool       leftGrip            = 11;
+  bool       leftGripTurnDown    = 12;
+  bool       leftGripTurnUp      = 13;
+  Vector2    leftStick           = 14;
+
+  Vector3    rightPos            = 15;
+  Vector3    rightRot            = 16;
+  Quaternion rightQuat           = 17;
+  float      rightTrigger        = 18;
+  bool       buttonA             = 19;
+  bool       buttonATurnDown     = 20;
+  bool       buttonATurnUp       = 21;
+  bool       buttonB             = 22;
+  bool       buttonBTurnDown     = 23;
+  bool       buttonBTurnUp       = 24;
+  bool       rightGrip           = 25;
+  bool       rightGripTurnDown   = 26;
+  bool       rightGripTurnUp     = 27;
+  Vector2    rightStick          = 28;
+}
+
+// ========= Hand 新版（压缩版） =========
+
+// rootPose 还是普通 Pose（内部用 float32）
+message Pose {
+  Vector3 position = 1;
+  Quaternion rotation = 2;
+}
+
+// joints[i].position（相对 rootPose.position 的 3 个 int8）
+// joints[i].rotation（四元数 4 个 uint8，按 [-1,1] → [0,255] 映射）
+message JointCompressed {
+  // 长度固定为 3 字节：
+  //   [0] = int8 dx
+  //   [1] = int8 dy
+  //   [2] = int8 dz
+  // 其中 dx,dy,dz 表示 jointPos - rootPos，单位：米，
+  // 按约定范围 [-D, D] 映射到 [-127,127]
+  bytes rel_pos = 1;
+
+  // 长度固定为 4 字节：
+  //   [0] = uint8 qx
+  //   [1] = uint8 qy
+  //   [2] = uint8 qz
+  //   [3] = uint8 qw
+  // 每个分量 v ∈ [-1,1] 映射为：
+  //   encode:  t = (v_clamped * 0.5 + 0.5); q = round(t * 255)
+  //   decode:  t = q / 255.0; v = (t - 0.5) * 2.0
+  bytes rot = 2;
+}
+
+// fingers[k] 的 5 个 [0,1] 浮点：fullCurl/baseCurl/tipCurl/pinch/spread
+// 每个用 1 个 uint8 存 0~255
+message FingerCompressed {
+  // 长度固定为 5 字节：
+  //   [0] = uint8 fullCurl   (v∈[0,1])
+  //   [1] = uint8 baseCurl   (v∈[0,1])
+  //   [2] = uint8 tipCurl    (v∈[0,1])
+  //   [3] = uint8 pinch      (v∈[0,1])
+  //   [4] = uint8 spread     (v∈[0,1])
+  // 映射规则：
+  //   encode: q = round(clamp(v,0,1) * 255)
+  //   decode: v = q / 255.0
+  bytes curls = 1;
+}
+
+// 单手数据（压缩版）
+message OneHandCompressed {
+  bool isTracked = 1;
+
+  // rootPose 全部用 float32，不压缩
+  Pose rootPose = 2;
+
+  // joints: position+rotation 都做压缩
+  repeated JointCompressed joints = 3;
+
+  // fingers: 五个标量各 1byte
+  repeated FingerCompressed fingers = 4;
+}
+
+// 整体 hand 输入（压缩版）
+message HandInputCompressed {
+  OneHandCompressed leftHand  = 1;
+  OneHandCompressed rightHand = 2;
+}

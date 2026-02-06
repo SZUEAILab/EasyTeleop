@@ -3,4 +3,8 @@ include src/qp-tools/src/*.c
 include src/qp-tools/include/*.h
 include src/qp-tools/LICENSE
 include src/qp-tools/README.md
+
+# TRRO SDK (vendored runtime assets)
+recursive-include src/EasyTeleop/third_party/trro-gateway-sdk-x64-release *
+
 include LICENSE

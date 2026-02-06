@@ -241,10 +241,15 @@ class BaseDevice(ABC):
         :param config: 配置字典
         :return: 是否设置成功
         """
-        # 检查必需的配置字段
+        # 先合并默认值，再检查必需字段
+        merged = dict(config) if config else {}
+        for key, spec in self.need_config.items():
+            if key not in merged and isinstance(spec, dict) and "default" in spec:
+                merged[key] = spec["default"]
+
         for key in self.need_config:
-            if key not in config:
+            if key not in merged:
                 raise ValueError(f"缺少必需的配置字段: {key}")
         
-        self.config = config
+        self.config = merged
         return True

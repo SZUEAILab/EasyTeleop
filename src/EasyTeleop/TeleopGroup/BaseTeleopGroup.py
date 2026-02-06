@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List, Callable
+from typing import Dict, Any, List, Callable, Optional
 import asyncio
 import threading
 import time
-from ..Components import TeleopMiddleware
-from ..Components import DataCollect
+from ..Components import TeleopMiddleware,DataCollect,RobotFeedbackPacker
 
 
 class BaseTeleopGroup(ABC):
@@ -27,6 +26,7 @@ class BaseTeleopGroup(ABC):
         self.teleop = TeleopMiddleware()
         self.data_collect = DataCollect()
         self.running = False
+        self.robot_feedback_packer = RobotFeedbackPacker()
         
         # 设备引用
         self.devices = devices or []  # 存储所有设备实例
