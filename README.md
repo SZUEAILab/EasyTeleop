@@ -245,25 +245,23 @@ camera = RealSenseCamera({"serial": "相机序列号", "target_fps": 30})
 
 2. 创建流跟踪器和WebRTC客户端：
 ```python
-from EasyTeleop.Components.WebRTC import CameraDeviceStreamTrack, UnityWebRTC
-tracker = CameraDeviceStreamTrack()
-client = UnityWebRTC(connection_id="LeftEye", signaling_url="你的信令服务器地址", tracker=tracker)
+from EasyTeleop.Components.WebRTC import UnityWebRTC
+client = UnityWebRTC(connection_id="LeftEye", signaling_url="你的信令服务器地址")
 ```
 
 3. 注册帧回调函数：
 ```python
 def frame_callback(frame):
-    tracker.put_frame(frame)
+    client.put_frame(frame)
 
 camera.on("frame", frame_callback)
 ```
 
 4. 启动异步连接：
 ```python
-async def main():
-    await client.connect()
-
-asyncio.run(main())
+client.start()
+# ... ?????
+client.stop()
 ```
 
 ## 项目结构
