@@ -2,57 +2,48 @@ import asyncio
 import cv2
 import logging
 import threading
-import queue
 from av import VideoFrame
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, MediaStreamTrack, RTCIceCandidate
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, RTCIceCandidate
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
 import websockets
 import json
 
 logger = logging.getLogger(__name__)
     
-class VideoDisplayTrack(MediaStreamTrack):
-    kind = "video"
-    WINDOW_NAME = "Receiver View"
-
-    def __init__(self, track):
-        super().__init__()  # 初始化基类
-        self.track = track
-
-    async def recv(self):
-        frame = await self.track.recv()
-        img = frame.to_ndarray(format="bgr24")
-        cv2.imshow(self.WINDOW_NAME, img)
-        cv2.waitKey(1)  # 不加这句 OpenCV 不刷新
-        return frame
-
-
 class CameraDeviceStreamTrack(VideoStreamTrack):
     """
     Video track that accepts frames from an external camera callback.
     """
     def __init__(self, queue_size=30):
         super().__init__()
-        self._frame_queue = queue.Queue(maxsize=queue_size)
-        self._lock = threading.Lock()
+        self._frame_queue = asyncio.Queue(maxsize=queue_size)
+        self._loop = asyncio.get_running_loop()
 
     def put_frame(self, color_frame):
         if color_frame is None:
             return
-        if self._frame_queue.full():
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._try_enqueue_frame, color_frame)
+
+    def _try_enqueue_frame(self, frame):
+        try:
+            self._frame_queue.put_nowait(frame)
+        except asyncio.QueueFull:
             try:
                 self._frame_queue.get_nowait()
-            except queue.Empty:
+            except asyncio.QueueEmpty:
+                return
+            try:
+                self._frame_queue.put_nowait(frame)
+            except asyncio.QueueFull:
                 pass
-        try:
-            self._frame_queue.put_nowait(color_frame)
-        except queue.Full:
-            pass
 
     async def recv(self):
+        if self._loop is None:
+            self._loop = asyncio.get_running_loop()
         try:
-            frame = self._frame_queue.get(timeout=5.0)
-        except queue.Empty:
+            frame = await asyncio.wait_for(self._frame_queue.get(), timeout=5.0)
+        except asyncio.TimeoutError:
             raise Exception("Timeout waiting for camera frame")
 
         if frame is None:
@@ -66,16 +57,15 @@ class CameraDeviceStreamTrack(VideoStreamTrack):
         return video_frame
 
     def stop(self):
-        with self._lock:
-            while not self._frame_queue.empty():
-                try:
-                    self._frame_queue.get_nowait()
-                except queue.Empty:
-                    break
+        while not self._frame_queue.empty():
+            try:
+                self._frame_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
         super().stop()
 
 class UnityWebRTC:
-    def __init__(self, connection_id, signaling_url, reconnect_delay=3.0, max_reconnect_delay=10.0, frame_queue_size=30, offer_interval=5.0, enable_recv_display=False):
+    def __init__(self, connection_id, signaling_url, reconnect_delay=3.0, max_reconnect_delay=10.0, frame_queue_size=30, offer_interval=5.0, enable_recv=True, data_channel_label="feedback", feedback_queue_size=20):
         self.connection_id = connection_id
         self.signaling_url = signaling_url
         self.ws = None
@@ -94,13 +84,68 @@ class UnityWebRTC:
         self._offer_interval = offer_interval
         self._offer_task = None
         self.polite = False
-        self.enable_recv_display = enable_recv_display
+        self.enable_recv = enable_recv
+        self.data_channel_label = data_channel_label
+        self._feedback_queue = asyncio.Queue(maxsize=feedback_queue_size)
+        self._pending_feedback = []
+        self._feedback_task = None
+        self._data_channel = None
+        self._events = {
+            "data": self._default_callback,
+            "frame": self._default_callback,
+            "error": self._default_error_callback,
+        }
         self._cleaning = False
         self._cleanup_lock = asyncio.Lock()
         self._display_track = None
         self._display_task = None
         self._rebuilding_offer = False
         self._restart_requested = False
+
+    def on(self, event_name: str, callback=None):
+        def decorator(func):
+            if not callable(func):
+                raise ValueError("callback must be callable")
+            self._events[event_name] = func
+            return func
+        if callback is not None:
+            return decorator(callback)
+        return decorator
+
+    def off(self, event_name: str) -> bool:
+        if event_name in self._events:
+            self._events[event_name] = self._default_callback
+            return True
+        return False
+
+    def emit(self, event_name: str, *args, **kwargs) -> None:
+        callback = self._events.get(event_name)
+        if not callback:
+            return
+        try:
+            if asyncio.iscoroutinefunction(callback):
+                thread = threading.Thread(target=self._run_async_callback, args=(callback, args, kwargs), daemon=True)
+                thread.start()
+            else:
+                thread = threading.Thread(target=callback, args=args, kwargs=kwargs, daemon=True)
+                thread.start()
+        except Exception as e:
+            self.emit("error", f"event {event_name} failed: {e}")
+
+    def _run_async_callback(self, callback, args, kwargs):
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(callback(*args, **kwargs))
+            loop.close()
+        except Exception as e:
+            self.emit("error", f"async event failed: {e}")
+
+    def _default_callback(self, *args, **kwargs):
+        pass
+
+    def _default_error_callback(self, error_msg: str) -> None:
+        logger.error("UnityWebRTC error: %s", error_msg)
 
     def start(self) -> bool:
         with self._thread_lock:
@@ -149,6 +194,29 @@ class UnityWebRTC:
     def put_frame(self, frame):
         if self._track:
             self._track.put_frame(frame)
+
+    def send_feedback(self, data):
+        if self._loop and self._loop.is_running():
+            self._loop.call_soon_threadsafe(self._try_enqueue_feedback, data)
+        else:
+            if len(self._pending_feedback) < self._feedback_queue.maxsize:
+                self._pending_feedback.append(data)
+            elif self._pending_feedback:
+                self._pending_feedback.pop(0)
+                self._pending_feedback.append(data)
+
+    def _try_enqueue_feedback(self, data):
+        try:
+            self._feedback_queue.put_nowait(data)
+        except asyncio.QueueFull:
+            try:
+                self._feedback_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
+            try:
+                self._feedback_queue.put_nowait(data)
+            except asyncio.QueueFull:
+                pass
 
     async def main_loop(self):
         self.should_run = True
@@ -228,6 +296,7 @@ class UnityWebRTC:
         pc = self.pc
         self.pending_candidates = []
         self._rebuilding_offer = False
+        self._data_channel = None
 
         @pc.on("icecandidate")
         async def on_icecandidate(candidate):
@@ -250,17 +319,65 @@ class UnityWebRTC:
         @pc.on("track")
         def on_track(track):
             logger.info("Track received: %s", track.kind)
-            if self.enable_recv_display and track.kind == "video":
-                self._display_track = VideoDisplayTrack(track)
+            if self.enable_recv and track.kind == "video":
+                self._display_track = track
                 self._display_task = asyncio.create_task(self._display_loop())
+
+        @pc.on("datachannel")
+        def on_datachannel(channel):
+            logger.info("DataChannel received: %s (%s)", channel.label, channel.readyState)
+            self._setup_data_channel(channel)
+            
+        if not self.polite:
+            channel = pc.createDataChannel(self.data_channel_label)
+            logger.info("DataChannel created: %s (%s)", channel.label, channel.readyState)
+            self._setup_data_channel(channel)
 
         self._track = CameraDeviceStreamTrack(queue_size=self._frame_queue_size)
         pc.addTrack(self._track)
+        
+
+    def _setup_data_channel(self, channel):
+        self._data_channel = channel
+
+        @channel.on("message")
+        def on_message(message):
+            self.emit("data", message)
+
+        @channel.on("open")
+        def on_open():
+            logger.info("DataChannel open: %s", channel.label)
+            if self._feedback_task is None or self._feedback_task.done():
+                self._feedback_task = asyncio.create_task(self._feedback_send_loop(channel))
+        @channel.on("close")
+        def on_close():
+            logger.info("DataChannel closed: %s", channel.label)
+        if channel.readyState == "open":
+            if self._feedback_task is None or self._feedback_task.done():
+                self._feedback_task = asyncio.create_task(self._feedback_send_loop(channel))
+
+    async def _feedback_send_loop(self, channel):
+        for item in self._pending_feedback:
+            self._feedback_queue.put_nowait(item)
+        self._pending_feedback.clear()
+        while self.should_run and channel.readyState == "open":
+            data = await self._feedback_queue.get()
+            try:
+                channel.send(data)
+            except Exception as e:
+                logger.error("Feedback send error: %s", e)
+                break
+
 
     async def _display_loop(self):
         while True:
             try:
-                await self._display_track.recv()
+                frame = await self._display_track.recv()
+                if self.enable_recv:
+                    img = frame.to_ndarray(format="bgr24")
+                    cv2.imshow("Receiver View", img)
+                    cv2.waitKey(1)
+                self.emit("frame", frame)
             except Exception as e:
                 logger.info("Video stream ended: %s", e)
                 break
@@ -445,12 +562,21 @@ class UnityWebRTC:
                     pass
                 self._display_task = None
             try:
-                cv2.destroyWindow(VideoDisplayTrack.WINDOW_NAME)
+                cv2.destroyWindow("Receiver View")
             except Exception:
                 pass
             if self._offer_task:
                 self._offer_task.cancel()
                 self._offer_task = None
+            if self._feedback_task:
+                self._feedback_task.cancel()
+                self._feedback_task = None
+            if self._data_channel:
+                try:
+                    self._data_channel.close()
+                except Exception:
+                    pass
+                self._data_channel = None
             if self.pc:
                 try:
                     await self.pc.close()

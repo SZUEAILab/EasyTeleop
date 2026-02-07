@@ -3,9 +3,13 @@ import threading
 import time
 
 import cv2
+import json
 
 from EasyTeleop.Components.WebRTC import UnityWebRTC
 from EasyTeleop.Device.Camera import TestCamera
+
+import logging
+logging.basicConfig(level=logging.INFO)
 
 
 def _start_preview_loop(stop_event: threading.Event, frame_ref: dict) -> threading.Thread:
@@ -50,6 +54,18 @@ def main() -> int:
 
     client = UnityWebRTC(connection_id=args.connection_id, signaling_url=args.signaling_url)
 
+    
+
+    @client.on("data")
+    def _on_feedback(msg):
+        print(f"[feedback] {msg}")
+        
+    @client.on("frame")
+    def _on_recv_frame(frame):
+        img = frame.to_ndarray(format="bgr24")
+        cv2.imshow("Receive", img)
+        cv2.waitKey(1)
+
     @camera.on("frame")
     def _on_frame(frame):
         frame_ref["frame"] = frame
@@ -57,7 +73,12 @@ def main() -> int:
 
     try:
         client.start()
+        tick = 0
         while not stop_event.is_set():
+            if tick % 50 == 0:
+                payload = {"type": "ping", "ts": time.time()}
+                client.send_feedback(json.dumps(payload))
+            tick += 1
             time.sleep(0.1)
     except KeyboardInterrupt:
         pass
