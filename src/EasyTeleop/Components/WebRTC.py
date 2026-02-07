@@ -1,5 +1,6 @@
 import asyncio
 import cv2
+import logging
 import threading
 import queue
 from av import VideoFrame
@@ -7,6 +8,8 @@ from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, M
 from aiortc.sdp import candidate_from_sdp, candidate_to_sdp
 import websockets
 import json
+
+logger = logging.getLogger(__name__)
     
 class VideoDisplayTrack(MediaStreamTrack):
     kind = "video"
@@ -152,22 +155,22 @@ class UnityWebRTC:
         delay = self._reconnect_delay
         while self.should_run:
             try:
-                print(f"Connecting to {self.signaling_url} ...")
+                logger.info("Connecting to %s ...", self.signaling_url)
                 await self.run_webrtc()
             except Exception as e:
-                print(f"Connection error: {e}")
+                logger.error("Connection error: %s", e)
             if not self.should_run:
                 break
             if self._restart_requested:
                 delay = self._reconnect_delay
-            print(f"Reconnecting in {delay} seconds...")
+            logger.info("Reconnecting in %s seconds...", delay)
             await asyncio.sleep(delay)
             delay = min(self._max_reconnect_delay, delay + 1.0)
 
     async def run_webrtc(self):
         self._restart_requested = False
         self.ws = await websockets.connect(self.signaling_url, ping_interval=10, ping_timeout=10)
-        print("Connected to signaling server")
+        logger.info("Connected to signaling server")
         self._set_conn_status(1)
         self._remote_connection_id = None
         self.polite = False
@@ -196,27 +199,27 @@ class UnityWebRTC:
                     try:
                         await self._handle_offer(msg)
                     except Exception as e:
-                        print(f"Offer handling error: {e}")
+                        logger.error("Offer handling error: %s", e)
                 elif msg_type == "answer":
                     try:
                         await self._handle_answer(msg)
                     except Exception as e:
-                        print(f"Answer handling error: {e}")
+                        logger.error("Answer handling error: %s", e)
                 elif msg_type == "candidate":
                     try:
                         await self._handle_candidate(msg)
                     except Exception as e:
-                        print(f"Candidate handling error: {e}")
+                        logger.error("Candidate handling error: %s", e)
                 elif msg_type == "disconnect":
-                    print("Disconnected")
+                    logger.warning("Disconnected")
                     self._set_conn_status(2)
                     break
                 elif msg_type == "error":
-                    print(f"Signaling error: {msg.get('message')}")
+                    logger.error("Signaling error: %s", msg.get("message"))
                     self._set_conn_status(2)
                     break
         except Exception as e:
-            print(f"WebRTC loop error: {e}")
+            logger.error("WebRTC loop error: %s", e)
         finally:
             await asyncio.shield(self.cleanup(stop=False))
 
@@ -237,7 +240,7 @@ class UnityWebRTC:
             if pc is not self.pc:
                 return
             state = pc.connectionState
-            print(f"Peer connection state: {state}")
+            logger.info("Peer connection state: %s", state)
             if self._rebuilding_offer:
                 return
             if state in ("failed", "disconnected", "closed"):
@@ -246,7 +249,7 @@ class UnityWebRTC:
 
         @pc.on("track")
         def on_track(track):
-            print(f"Track received: {track.kind}")
+            logger.info("Track received: %s", track.kind)
             if self.enable_recv_display and track.kind == "video":
                 self._display_track = VideoDisplayTrack(track)
                 self._display_task = asyncio.create_task(self._display_loop())
@@ -259,7 +262,7 @@ class UnityWebRTC:
             try:
                 await self._display_track.recv()
             except Exception as e:
-                print("Video stream ended:", e)
+                logger.info("Video stream ended: %s", e)
                 break
 
     def _get_msg_connection_id(self, msg):
@@ -282,15 +285,15 @@ class UnityWebRTC:
             return
         if self.pc.signalingState != "stable":
             if not self.polite:
-                print(f"Ignore offer in signaling state: {self.pc.signalingState}")
+                logger.warning("Ignore offer in signaling state: %s", self.pc.signalingState)
                 return
-            print(f"Rollback to accept offer in signaling state: {self.pc.signalingState}")
+            logger.info("Rollback to accept offer in signaling state: %s", self.pc.signalingState)
             try:
                 await self.pc.setLocalDescription(RTCSessionDescription(type="rollback", sdp=""))
             except Exception as e:
-                print(f"Rollback failed: {e}")
+                logger.error("Rollback failed: %s", e)
             if self.pc.signalingState != "stable":
-                print(f"Reset peer to accept offer in signaling state: {self.pc.signalingState}")
+                logger.warning("Reset peer to accept offer in signaling state: %s", self.pc.signalingState)
                 try:
                     await self.pc.close()
                 except Exception:
@@ -319,13 +322,13 @@ class UnityWebRTC:
 
     async def _handle_description(self, desc):
         if desc.type == "answer" and self.pc.signalingState == "stable" and self.pc.remoteDescription and self.pc.remoteDescription.type == "answer":
-            print("Ignore duplicate answer in stable state")
+            logger.info("Ignore duplicate answer in stable state")
             return
 
         try:
             await self.pc.setRemoteDescription(desc)
         except Exception as e:
-            print(f"SetRemoteDescription error: {e}")
+            logger.error("SetRemoteDescription error: %s", e)
             return
 
         if desc.type == "offer":
@@ -351,7 +354,7 @@ class UnityWebRTC:
         try:
             parsed = candidate_from_sdp(candidate_sdp)
         except Exception as e:
-            print(f"Invalid candidate: {e}")
+            logger.error("Invalid candidate: %s", e)
             return
         candidate = RTCIceCandidate(
             foundation=parsed.foundation,
@@ -402,7 +405,7 @@ class UnityWebRTC:
         try:
             candidate_sdp = candidate_to_sdp(candidate)
         except Exception as e:
-            print(f"Failed to encode candidate: {e}")
+            logger.error("Failed to encode candidate: %s", e)
             return
         await self._send_ws({
             "type": "candidate",
