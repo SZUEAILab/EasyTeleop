@@ -27,3 +27,6 @@ datasets/*
 test/*
 
 .vscode/
+
+
+!src/trro-gateway-sdk-x64-release/**/*.so
