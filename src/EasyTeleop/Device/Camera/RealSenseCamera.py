@@ -20,7 +20,7 @@ class RealSenseCamera(BaseCamera):
             "description": "RealSense设备序列号"
         },
         "target_fps": {
-            "type": "integer",
+            "type": "number",
             "description": "目标帧率,0为不控制,默认30,但是注意D405摄像头同时使用两个需要设置为15",
             "default": 30
         },

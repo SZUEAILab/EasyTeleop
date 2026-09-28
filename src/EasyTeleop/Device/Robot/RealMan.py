@@ -21,7 +21,7 @@ class RealMan(BaseRobot):
             "default": "192.168.1.18"
         },
         "port": {
-            "type": "integer",
+            "type": "number",
             "description": "睿尔曼机械臂端口号",
             "default": 8080
         },
